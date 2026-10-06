@@ -12,7 +12,7 @@ import Paginacao from './Paginacao.vue'
 import Progresso from './Progresso.vue'
 import Selo from './Selo.vue'
 import { api, type Pagina } from '../api.ts'
-import { avisar, confirmar } from '../avisos.ts'
+import { avisar, confirmar, type LinkAviso } from '../avisos.ts'
 import { FORMAS_PAGAMENTO, data, hoje, moeda, paraNumero, resumoCobranca, rotuloForma, rotuloParcela } from '../format.ts'
 import { useRecurso } from '../recurso.ts'
 
@@ -65,13 +65,18 @@ function alternar(contaId: string) {
 const salvando = ref(false)
 const erroFormulario = ref('')
 
-async function executar(acao: () => Promise<unknown>, sucesso: string, fechar?: () => void) {
+async function executar<T>(
+  acao: () => Promise<T>,
+  sucesso: string,
+  fechar?: () => void,
+  link?: (resultado: T) => LinkAviso | undefined,
+) {
   salvando.value = true
   erroFormulario.value = ''
   try {
-    await acao()
+    const resultado = await acao()
     fechar?.()
-    avisar(sucesso)
+    avisar(sucesso, 'sucesso', link?.(resultado))
     await contas.recarregar()
     emit('alterado')
   } catch (e) {
@@ -116,13 +121,13 @@ const salvarConta = () =>
   executar(
     () =>
       contaEditando.value
-        ? api.put(`/contas/${contaEditando.value.id}`, {
+        ? api.put<{ id: string }>(`/contas/${contaEditando.value.id}`, {
             descricao: formConta.descricao,
             caso_id: formConta.caso_id || null,
             forma_pagamento: formConta.forma_pagamento || undefined,
             observacoes: formConta.observacoes || undefined,
           })
-        : api.post('/contas', {
+        : api.post<{ id: string }>('/contas', {
             cliente_id: props.clienteId,
             caso_id: formConta.caso_id || null,
             descricao: formConta.descricao,
@@ -139,6 +144,10 @@ const salvarConta = () =>
           }),
     contaEditando.value ? 'Cobrança atualizada.' : 'Cobrança criada.',
     () => (modalConta.value = false),
+    (conta) =>
+      !contaEditando.value && conta && resumoConta.value.pagamentos > 1
+        ? { texto: 'Termo de parcelamento', href: `/imprimir/parcelamento/${conta.id}` }
+        : undefined,
   )
 
 const modalPagamento = ref(false)
@@ -165,7 +174,7 @@ function abrirPagamento(parcela: Parcela, conta: Conta) {
 const salvarPagamento = (repasses: Repasse[]) =>
   executar(
     () =>
-      api.post(`/parcelas/${parcelaAtual.value!.id}/pagamento`, {
+      api.post<{ recebimento_id: string }>(`/parcelas/${parcelaAtual.value!.id}/pagamento`, {
         valor: paraNumero(formPagamento.valor),
         data_pagamento: formPagamento.data_pagamento,
         forma_pagamento: formPagamento.forma_pagamento || undefined,
@@ -175,6 +184,7 @@ const salvarPagamento = (repasses: Repasse[]) =>
       }),
     repasses.length ? 'Pagamento registrado e repasse lançado.' : 'Pagamento registrado.',
     () => (modalPagamento.value = false),
+    (r) => ({ texto: 'Recibo', href: `/imprimir/recibo/recebimento/${r.recebimento_id}` }),
   )
 
 const modalParcela = ref(false)
@@ -257,7 +267,7 @@ defineExpose({ abrirConta, recarregar: contas.recarregar })
             <th class="num">Falta receber</th>
             <th class="nowrap">Próximo vencimento</th>
             <th>Status</th>
-            <th style="width: 76px"></th>
+            <th style="width: 112px"></th>
           </tr>
         </thead>
         <template v-for="conta in contas.dados.value.dados" :key="conta.id">
@@ -289,6 +299,17 @@ defineExpose({ abrirConta, recarregar: contas.recarregar })
               <td class="nowrap">{{ data(conta.proximo_vencimento) }}</td>
               <td><Selo :situacao="conta.situacao" /></td>
               <td class="num nowrap">
+                <a
+                  class="botao icone"
+                  :href="`/imprimir/parcelamento/${conta.id}`"
+                  target="_blank"
+                  rel="noopener"
+                  aria-label="Termo de parcelamento para assinar"
+                  title="Imprimir termo de parcelamento para o cliente assinar"
+                  @click.stop
+                >
+                  <Icone nome="imprimir" />
+                </a>
                 <button class="botao icone" aria-label="Editar cobrança" @click.stop="abrirConta(conta)">
                   <Icone nome="editar" />
                 </button>
@@ -339,13 +360,24 @@ defineExpose({ abrirConta, recarregar: contas.recarregar })
                                 </span>
                                 <div v-if="r.observacoes" class="obs"><Icone nome="casos" :tamanho="12" /> {{ r.observacoes }}</div>
                               </div>
-                              <button
-                                class="botao texto"
-                                :aria-label="`Estornar ${moeda(r.valor)} de ${data(r.data)}`"
-                                @click="estornar(parcela, r)"
-                              >
-                                Estornar
-                              </button>
+                              <span class="acoes-recebimento">
+                                <a
+                                  class="botao texto"
+                                  :href="`/imprimir/recibo/recebimento/${r.id}`"
+                                  target="_blank"
+                                  rel="noopener"
+                                  :aria-label="`Recibo de ${moeda(r.valor)} de ${data(r.data)}`"
+                                >
+                                  Recibo
+                                </a>
+                                <button
+                                  class="botao texto"
+                                  :aria-label="`Estornar ${moeda(r.valor)} de ${data(r.data)}`"
+                                  @click="estornar(parcela, r)"
+                                >
+                                  Estornar
+                                </button>
+                              </span>
                             </li>
                           </ul>
                         </td>

@@ -9,11 +9,14 @@ import { registrarAdvogados } from './modules/advogados.ts'
 import { registrarAuditoriaRotas, registrarHooksAuditoria } from './modules/auditoria.ts'
 import { registrarCaixa } from './modules/caixa.ts'
 import { registrarCarteiras } from './modules/carteiras.ts'
+import { registrarBusca } from './modules/busca.ts'
 import { registrarCasos } from './modules/casos.ts'
 import { registrarClientes } from './modules/clientes.ts'
 import { registrarContas } from './modules/contas.ts'
 import { registrarDashboard } from './modules/dashboard.ts'
 import { registrarDespesas } from './modules/despesas.ts'
+import { registrarDocumentos } from './modules/documentos.ts'
+import { registrarExportar } from './modules/exportar.ts'
 import { registrarHistorico } from './modules/historico.ts'
 import { registrarNotas } from './modules/notas.ts'
 import { registrarUsuarios } from './modules/usuarios.ts'
@@ -65,6 +68,9 @@ export async function criarApp() {
   registrarUsuarios(app)
   registrarAuditoriaRotas(app)
   registrarHistorico(app)
+  registrarDocumentos(app)
+  registrarExportar(app)
+  registrarBusca(app)
 
   const publico = join(dirname(fileURLToPath(import.meta.url)), '..', 'public')
   if (existsSync(publico)) {

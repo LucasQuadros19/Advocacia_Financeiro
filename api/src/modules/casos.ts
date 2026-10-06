@@ -145,8 +145,8 @@ export function registrarCasos(app: FastifyInstance) {
       )
       const novo = rows[0]
       if (c.advogados?.length) await salvarParticipantes(client, novo.id, c.advogados)
-      if (c.conta) await criarConta(client, c.cliente_id, novo.id, c.conta)
-      return novo
+      const conta = c.conta ? await criarConta(client, c.cliente_id, novo.id, c.conta) : null
+      return { ...novo, conta_id: conta?.id ?? null }
     })
     reply.code(201)
     return caso

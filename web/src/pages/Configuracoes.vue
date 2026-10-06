@@ -6,6 +6,7 @@ import CampoMoeda from '../components/CampoMoeda.vue'
 import Estado from '../components/Estado.vue'
 import Icone from '../components/Icone.vue'
 import Modal from '../components/Modal.vue'
+import PainelEscritorio from '../components/PainelEscritorio.vue'
 import PainelUsuarios from '../components/PainelUsuarios.vue'
 import { api, type Pagina } from '../api.ts'
 import { avisar, confirmar } from '../avisos.ts'
@@ -19,7 +20,7 @@ type Advogado = {
 
 type Carteira = { id: string; nome: string; tipo: 'banco' | 'dinheiro'; saldo_inicial: string; saldo: string; ativa: boolean }
 
-const ABAS = { usuarios: 'Usuários', advogados: 'Advogados', bancos: 'Bancos e dinheiro' } as const
+const ABAS = { usuarios: 'Usuários', advogados: 'Advogados', bancos: 'Bancos e dinheiro', escritorio: 'Escritório' } as const
 type Aba = keyof typeof ABAS
 
 const rota = useRoute()
@@ -185,7 +186,7 @@ async function excluir(advogado: Advogado) {
   <div class="topo">
     <div>
       <h1>Configurações</h1>
-      <p>Quem usa o sistema, os advogados do escritório e onde o dinheiro fica.</p>
+      <p>Quem usa o sistema, os advogados, onde o dinheiro fica e os dados que saem nos documentos.</p>
     </div>
   </div>
 
@@ -203,6 +204,7 @@ async function excluir(advogado: Advogado) {
   </div>
 
   <PainelUsuarios v-if="aba === 'usuarios'" />
+  <PainelEscritorio v-if="aba === 'escritorio'" />
 
   <Estado v-if="aba === 'advogados'" :carregando="carregando" :erro="erro" @repetir="recarregar">
     <section class="painel">

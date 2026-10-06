@@ -317,7 +317,7 @@ export function registrarContas(app: FastifyInstance) {
       }
       const repasses = validarRepasses(c.repasses ?? [])
 
-      await transacao(async (client) => {
+      const recebimentoId = await transacao(async (client) => {
         const { rows } = await client.query<{ restante: string; status: string; futura: boolean }>(
           `select valor - valor_pago as restante, status, $2::date > current_date as futura
            from parcelas where id = $1 for update`,
@@ -342,9 +342,11 @@ export function registrarContas(app: FastifyInstance) {
         )
         await sincronizarParcela(client, id)
         await criarRepasses(client, { recebimento_id: criado[0]!.id }, centavos / 100, repasses)
+        return criado[0]!.id
       })
 
-      return consultarUm(`select ${camposParcela} from vw_parcelas where id = $1`, [id])
+      const parcela = await consultarUm(`select ${camposParcela} from vw_parcelas where id = $1`, [id])
+      return { ...parcela, recebimento_id: recebimentoId }
     },
   )
 

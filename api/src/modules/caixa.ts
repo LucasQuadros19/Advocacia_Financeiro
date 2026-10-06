@@ -84,6 +84,7 @@ export function registrarCaixa(app: FastifyInstance) {
             status: { type: 'string', enum: ['pendente', 'pago'] },
             mes: { type: 'string', pattern: '^\\d{4}-(0[1-9]|1[0-2])$' },
             carteira_id: UUID,
+            advogado_id: UUID,
           },
         },
       },
@@ -98,6 +99,7 @@ export function registrarCaixa(app: FastifyInstance) {
         status?: string
         mes?: string
         carteira_id?: string
+        advogado_id?: string
         ordem?: string
         direcao?: string
       }
@@ -109,13 +111,15 @@ export function registrarCaixa(app: FastifyInstance) {
         q.mes ? `${q.mes}-01` : null,
         q.status ?? null,
         q.carteira_id ?? null,
+        q.advogado_id ?? null,
       ]
       const onde = `($1::text is null or tipo = $1)
                     and ($2::text is null or origem = $2)
                     and ($3::text is null or situacao = $3)
                     and ($4::date is null or date_trunc('month', coalesce(data_pagamento, vencimento)) = $4)
                     and ($5::text is null or status = $5)
-                    and ($6::uuid is null or carteira_id = $6 or carteira_destino_id = $6)`
+                    and ($6::uuid is null or carteira_id = $6 or carteira_destino_id = $6)
+                    and ($7::uuid is null or advogado_id = $7)`
       const ordem = ordenacao(
         q,
         ORDEM_LANCAMENTOS,
@@ -131,7 +135,7 @@ export function registrarCaixa(app: FastifyInstance) {
            from vw_caixa_lancamentos
            where ${onde}
            order by ${ordem}
-           limit $7 offset $8`,
+           limit $8 offset $9`,
           [...filtros, limite, offset],
         ),
         consultarUm(
@@ -289,6 +293,77 @@ export function registrarCaixa(app: FastifyInstance) {
           : invalido('A data do pagamento não pode ser futura')
       }
       return consultarUm(`select ${campos} from vw_caixa_lancamentos where id = $1 and origem = 'repasse'`, [id])
+    },
+  )
+
+  app.get(
+    '/api/repasses/resumo',
+    { schema: { querystring: { type: 'object', properties: { mes: { type: 'string', pattern: '^\\d{4}-(0[1-9]|1[0-2])$' } } } } },
+    async (req) => {
+      const mes = (req.query as { mes?: string }).mes ?? new Date().toLocaleDateString('en-CA').slice(0, 7)
+      const advogados = await consultar(
+        `select a.id, a.nome, a.principal,
+                coalesce(sum(r.valor) filter (where r.status = 'pendente'), 0) as a_pagar,
+                count(*) filter (where r.status = 'pendente') as qtd_a_pagar,
+                coalesce(sum(r.valor) filter (
+                  where r.status = 'pago' and date_trunc('month', r.data_pagamento) = $1::date
+                ), 0) as pago_mes,
+                coalesce(sum(r.valor) filter (where r.status = 'pago'), 0) as pago_total,
+                min(coalesce(rc.data, m.data)) filter (where r.status = 'pendente') as pendente_desde
+         from advogados a
+         join repasses r on r.advogado_id = a.id
+         left join recebimentos rc on rc.id = r.recebimento_id
+         left join lancamentos m on m.id = r.lancamento_id
+         group by a.id, a.nome, a.principal
+         order by a_pagar desc, a.nome
+         limit 100`,
+        [`${mes}-01`],
+      )
+      return { mes, advogados }
+    },
+  )
+
+  app.post(
+    '/api/repasses/pagamento-lote',
+    {
+      schema: {
+        body: {
+          type: 'object',
+          required: ['ids', 'data_pagamento'],
+          additionalProperties: false,
+          properties: {
+            ids: { type: 'array', minItems: 1, maxItems: 100, uniqueItems: true, items: UUID },
+            data_pagamento: DATA,
+            forma_pagamento: { type: 'string', enum: FORMAS },
+            carteira_id: UUID_OPCIONAL,
+            observacoes: TEXTO_LONGO,
+          },
+        },
+      },
+    },
+    async (req) => {
+      const c = req.body as {
+        ids: string[]; data_pagamento: string; forma_pagamento?: string; carteira_id?: string | null; observacoes?: string
+      }
+      if (c.data_pagamento > new Date().toLocaleDateString('en-CA')) throw invalido('A data do pagamento não pode ser futura')
+      return transacao(async (client) => {
+        const carteira = await validarCarteira(client, c.carteira_id)
+        const { rows } = await client.query<{ valor: string }>(
+          `update repasses
+              set status = 'pago', data_pagamento = $2,
+                  forma_pagamento = coalesce($3, forma_pagamento),
+                  carteira_id = $5,
+                  observacoes = coalesce($4, observacoes)
+            where id = any($1::uuid[]) and status = 'pendente'
+            returning valor`,
+          [c.ids, c.data_pagamento, c.forma_pagamento || null, c.observacoes || null, carteira],
+        )
+        if (rows.length !== c.ids.length) {
+          throw new ApiError(409, 'Algum repasse já foi pago ou não existe mais. Atualize a lista e tente de novo.')
+        }
+        const total = rows.reduce((soma, r) => soma + Math.round(Number(r.valor) * 100), 0) / 100
+        return { pagos: rows.length, total }
+      })
     },
   )
 

@@ -1,10 +1,47 @@
 import type { FastifyInstance } from 'fastify'
 import { consultar, consultarUm } from '../db.ts'
 import { saldosCarteiras } from './carteiras.ts'
+import { gerarLancamentos } from './despesas.ts'
+
+const DIAS_ATRASO = 30
+const DIAS_REPASSE_PARADO = 15
+const HORIZONTES = [30, 60, 90]
+
+// contas programadas ainda não geradas entram como ocorrências virtuais até o maior horizonte
+const PREVISAO = `
+  with dias(d) as (select unnest($1::int[])),
+  receber as (
+    select vencimento, valor - valor_pago as valor from parcelas
+    where status = 'pendente' and vencimento >= current_date
+  ),
+  pagar as (
+    select vencimento, valor from despesa_lancamentos where status = 'pendente'
+    union all
+    select g.vencimento, d.valor
+    from despesas d
+    cross join lateral generate_series(
+      date_trunc('month', current_date), date_trunc('month', current_date + $2::int), interval '1 month'
+    ) as m(mes)
+    cross join lateral (
+      select (m.mes + (least(
+        d.dia_vencimento, extract(day from (m.mes + interval '1 month' - interval '1 day'))::int
+      ) - 1) * interval '1 day')::date as vencimento
+    ) g
+    where d.ativa and g.vencimento >= d.inicio and (d.fim is null or g.vencimento <= d.fim)
+      and g.vencimento >= current_date
+      and not exists (select 1 from despesa_lancamentos l where l.despesa_id = d.id and l.competencia = m.mes::date)
+  )
+  select dias.d as dias,
+         (select coalesce(sum(valor), 0) from receber where vencimento <= current_date + dias.d) as a_receber,
+         (select coalesce(sum(valor), 0) from pagar where vencimento <= current_date + dias.d) as a_pagar,
+         (select coalesce(sum(valor), 0) from repasses where status = 'pendente') as repasses
+  from dias
+  order by dias.d`
 
 export function registrarDashboard(app: FastifyInstance) {
   app.get('/api/dashboard', async () => {
-    const [financeiro, contagens, advogado, proximos, meses, carteiras] = await Promise.all([
+    await gerarLancamentos()
+    const [financeiro, contagens, advogado, proximos, meses, carteiras, alertas, horizontes] = await Promise.all([
       consultarUm(
         `select coalesce(sum(valor - valor_pago), 0) as a_receber,
                 coalesce(sum(valor_pago), 0) as recebido,
@@ -62,12 +99,60 @@ export function registrarDashboard(app: FastifyInstance) {
          order by m.mes`,
       ),
       saldosCarteiras(new Date().toLocaleDateString('en-CA').slice(0, 7)),
+      consultarUm<Record<string, string>>(
+        `with p as (
+           select count(*) as qtd, coalesce(sum(valor - valor_pago), 0) as valor
+           from parcelas where status = 'pendente' and vencimento < current_date - $1::int
+         ),
+         r as (
+           select count(*) as qtd, coalesce(sum(r.valor), 0) as valor
+           from repasses r
+           left join recebimentos rc on rc.id = r.recebimento_id
+           left join lancamentos m on m.id = r.lancamento_id
+           where r.status = 'pendente' and coalesce(rc.data, m.data) < current_date - $2::int
+         ),
+         d as (
+           select count(*) as qtd, coalesce(sum(valor), 0) as valor
+           from despesa_lancamentos where status = 'pendente' and vencimento < current_date
+         )
+         select p.qtd as parcelas_atrasadas, p.valor as parcelas_atrasadas_valor,
+                r.qtd as repasses_parados, r.valor as repasses_parados_valor,
+                d.qtd as contas_vencidas, d.valor as contas_vencidas_valor
+         from p, r, d`,
+        [DIAS_ATRASO, DIAS_REPASSE_PARADO],
+      ),
+      consultar<{ dias: number; a_receber: string; a_pagar: string; repasses: string }>(PREVISAO, [
+        HORIZONTES,
+        Math.max(...HORIZONTES),
+      ]),
     ])
     const caixa = {
       saldo: [...carteiras.dados, ...(carteiras.sem_carteira ? [carteiras.sem_carteira] : [])]
         .reduce((soma, c) => soma + Math.round(Number(c.saldo) * 100), 0) / 100,
       contas: carteiras.dados.filter((c) => c.ativa).length,
     }
-    return { financeiro, contagens, advogado, proximos, meses, caixa }
+    const centavos = (v: string | number) => Math.round(Number(v) * 100)
+    const previsao = horizontes.map((h) => ({
+      ...h,
+      saldo_previsto:
+        (centavos(caixa.saldo) + centavos(h.a_receber) - centavos(h.a_pagar) - centavos(h.repasses)) / 100,
+    }))
+    return {
+      financeiro,
+      contagens,
+      advogado,
+      proximos,
+      meses,
+      caixa,
+      previsao,
+      alertas: {
+        ...alertas,
+        dias_atraso: DIAS_ATRASO,
+        dias_repasse: DIAS_REPASSE_PARADO,
+        contas_negativas: carteiras.dados
+          .filter((c) => c.ativa && Number(c.saldo) < 0)
+          .map((c) => ({ id: c.id, nome: c.nome, saldo: c.saldo })),
+      },
+    }
   })
 }

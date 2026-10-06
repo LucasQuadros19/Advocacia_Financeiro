@@ -82,3 +82,49 @@ export const FORMAS_PAGAMENTO = [
 
 export const rotuloForma = (forma: string | null | undefined) =>
   forma ? (FORMAS_PAGAMENTO.find(([valor]) => valor === forma)?.[1] ?? forma) : null
+
+const UNIDADES = [
+  '', 'um', 'dois', 'três', 'quatro', 'cinco', 'seis', 'sete', 'oito', 'nove', 'dez', 'onze', 'doze', 'treze',
+  'quatorze', 'quinze', 'dezesseis', 'dezessete', 'dezoito', 'dezenove',
+]
+const DEZENAS = ['', '', 'vinte', 'trinta', 'quarenta', 'cinquenta', 'sessenta', 'setenta', 'oitenta', 'noventa']
+const CENTENAS = [
+  '', 'cento', 'duzentos', 'trezentos', 'quatrocentos', 'quinhentos', 'seiscentos', 'setecentos', 'oitocentos', 'novecentos',
+]
+
+function ate999(n: number) {
+  if (n === 100) return 'cem'
+  const resto = n % 100
+  const partes = [CENTENAS[Math.floor(n / 100)]!]
+  if (resto < 20) partes.push(UNIDADES[resto]!)
+  else partes.push(resto % 10 ? `${DEZENAS[Math.floor(resto / 10)]} e ${UNIDADES[resto % 10]}` : DEZENAS[resto / 10]!)
+  return partes.filter(Boolean).join(' e ')
+}
+
+function inteiroPorExtenso(n: number) {
+  const grupos = [
+    { valor: Math.floor(n / 1_000_000), texto: (v: number) => (v === 1 ? 'um milhão' : `${ate999(v)} milhões`) },
+    { valor: Math.floor(n / 1000) % 1000, texto: (v: number) => (v === 1 ? 'mil' : `${ate999(v)} mil`) },
+    { valor: n % 1000, texto: ate999 },
+  ].filter((g) => g.valor)
+  return grupos
+    .map((g, i) => {
+      if (i === 0) return g.texto(g.valor)
+      const ultimo = i === grupos.length - 1
+      return `${ultimo && (g.valor < 100 || g.valor % 100 === 0) ? 'e ' : ''}${g.texto(g.valor)}`
+    })
+    .join(' ')
+}
+
+export function porExtenso(valor: number | string) {
+  const centavos = Math.round(Number(valor) * 100)
+  const reais = Math.floor(centavos / 100)
+  const resto = centavos % 100
+  const textoCentavos = resto ? `${ate999(resto)} ${resto === 1 ? 'centavo' : 'centavos'}` : ''
+  if (!reais) return textoCentavos || 'zero reais'
+  const sufixo = reais === 1 ? 'real' : reais % 1_000_000 === 0 ? 'de reais' : 'reais'
+  return [`${inteiroPorExtenso(reais)} ${sufixo}`, textoCentavos].filter(Boolean).join(' e ')
+}
+
+export const dataPorExtenso = (iso: string) =>
+  new Date(`${iso.slice(0, 10)}T12:00:00`).toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })

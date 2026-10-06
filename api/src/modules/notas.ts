@@ -4,7 +4,7 @@ import { UUID, invalido, naoEncontrado, paginar, paramsId, queryPaginacao, respo
 
 const TEXTO_NOTA = { type: 'string', minLength: 1, maxLength: 4000 } as const
 
-const campos = 'id, cliente_id, caso_id, autor, texto, criado_em'
+const campos = 'id, cliente_id, caso_id, autor, texto, criado_em, editado_em'
 
 export function registrarNotas(app: FastifyInstance) {
   app.get(
@@ -68,6 +68,27 @@ export function registrarNotas(app: FastifyInstance) {
         [c.cliente_id ?? null, c.caso_id ?? null, req.usuario!.nome, texto],
       )
       reply.code(201)
+      return nota
+    },
+  )
+
+  app.put(
+    '/api/notas/:id',
+    {
+      schema: {
+        params: paramsId,
+        body: { type: 'object', required: ['texto'], additionalProperties: false, properties: { texto: TEXTO_NOTA } },
+      },
+    },
+    async (req) => {
+      const { id } = req.params as { id: string }
+      const texto = (req.body as { texto: string }).texto.trim()
+      if (!texto) throw invalido('A nota não pode ficar vazia')
+      const nota = await consultarUm(
+        `update notas set texto = $2, editado_em = now() where id = $1 returning ${campos}`,
+        [id, texto],
+      )
+      if (!nota) throw naoEncontrado('Nota')
       return nota
     },
   )

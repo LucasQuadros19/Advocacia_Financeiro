@@ -1266,3 +1266,217 @@ describe('cobranças do caso e observações', () => {
     assert.equal(linha.observacoes, 'Pago no balcão, em espécie')
   })
 })
+
+describe('documentos para imprimir', () => {
+  let clienteId = ''
+  let contaId = ''
+  let parcelaId = ''
+
+  before(async () => {
+    clienteId = (await chamar('POST', '/api/clientes', { nome: 'Maria Recibo', documento: '987.654.321-00' })).json().id
+    const conta = await chamar('POST', '/api/contas', {
+      cliente_id: clienteId,
+      descricao: 'Honorários parcelados',
+      valor_total: 900,
+      quantidade_parcelas: 3,
+      primeiro_vencimento: emDias(-2),
+    })
+    contaId = conta.json().id
+    parcelaId = (await chamar('GET', `/api/contas/${contaId}`)).json().parcelas[0].id
+  })
+
+  it('guarda os dados do escritório e recusa nome vazio', async () => {
+    const vazio = await chamar('PUT', '/api/escritorio', { nome: '' })
+    assert.equal(vazio.statusCode, 400)
+    const salvo = await chamar('PUT', '/api/escritorio', {
+      nome: 'Quadros Advocacia', documento: '12.345.678/0001-90', cidade: 'Florianópolis/SC', email: ' ',
+    })
+    assert.equal(salvo.statusCode, 200)
+    assert.equal(salvo.json().email, null, 'campo em branco vira vazio')
+    assert.equal((await chamar('GET', '/api/escritorio')).json().nome, 'Quadros Advocacia')
+  })
+
+  it('o pagamento devolve o recebimento e o recibo mostra quanto ainda falta naquela parcela', async () => {
+    const primeiro = await chamar('POST', `/api/parcelas/${parcelaId}/pagamento`, { valor: 100, data_pagamento: emDias(-1) })
+    const segundo = await chamar('POST', `/api/parcelas/${parcelaId}/pagamento`, { valor: 50, data_pagamento: emDias(0) })
+    assert.ok(primeiro.json().recebimento_id)
+
+    const recibo1 = (await chamar('GET', `/api/documentos/recibo/recebimento/${primeiro.json().recebimento_id}`)).json()
+    assert.equal(recibo1.escritorio.nome, 'Quadros Advocacia')
+    assert.equal(recibo1.recibo.cliente_nome, 'Maria Recibo')
+    assert.equal(Number(recibo1.recibo.valor), 100)
+    assert.equal(Number(recibo1.recibo.restante_apos), 200, 'no primeiro recibo faltavam 200')
+
+    const recibo2 = (await chamar('GET', `/api/documentos/recibo/recebimento/${segundo.json().recebimento_id}`)).json()
+    assert.equal(Number(recibo2.recibo.restante_apos), 150)
+    assert.equal(recibo2.recibo.numero, 1)
+    assert.equal(recibo2.recibo.total_parcelas, 3)
+  })
+
+  it('emite recibo de entrada manual, mas não de saída', async () => {
+    const entrada = await chamar('POST', '/api/caixa/lancamentos', {
+      tipo: 'entrada', descricao: 'Consulta no balcão', valor: 250, data: emDias(0), cliente_id: clienteId,
+    })
+    const recibo = (await chamar('GET', `/api/documentos/recibo/manual/${entrada.json().id}`)).json()
+    assert.equal(recibo.recibo.descricao, 'Consulta no balcão')
+    assert.equal(recibo.recibo.cliente_nome, 'Maria Recibo')
+
+    const saida = await chamar('POST', '/api/caixa/lancamentos', {
+      tipo: 'saida', descricao: 'Custas', valor: 30, data: emDias(0),
+    })
+    assert.equal((await chamar('GET', `/api/documentos/recibo/manual/${saida.json().id}`)).statusCode, 404)
+    assert.equal((await chamar('GET', `/api/documentos/recibo/outro/${saida.json().id}`)).statusCode, 400)
+  })
+
+  it('o termo de parcelamento traz cliente e todas as parcelas', async () => {
+    const termo = (await chamar('GET', `/api/documentos/parcelamento/${contaId}`)).json()
+    assert.equal(termo.conta.cliente_documento, '987.654.321-00')
+    assert.deepEqual(termo.parcelas.map((p: { numero: number }) => p.numero), [1, 2, 3])
+    assert.equal(termo.parcelas.reduce((s: number, p: { valor: string }) => s + Number(p.valor), 0), 900)
+  })
+})
+
+describe('busca geral', () => {
+  it('acha cliente pelo nome e pelo CPF sem pontuação', async () => {
+    const porNome = (await chamar('GET', '/api/busca?q=maria rec')).json()
+    assert.equal(porNome.clientes[0].nome, 'Maria Recibo')
+    const porCpf = (await chamar('GET', '/api/busca?q=98765432100')).json()
+    assert.equal(porCpf.clientes[0].nome, 'Maria Recibo')
+  })
+
+  it('acha cobrança pela descrição e lançamento pelo valor', async () => {
+    const cobranca = (await chamar('GET', '/api/busca?q=parcelados')).json()
+    assert.equal(cobranca.cobrancas[0].descricao, 'Honorários parcelados')
+    const valor = (await chamar('GET', '/api/busca?q=R$ 250,00')).json()
+    assert.ok(valor.valores.some((v: { descricao: string }) => v.descricao === 'Consulta no balcão'))
+  })
+
+  it('recusa busca curta demais', async () => {
+    assert.equal((await chamar('GET', '/api/busca?q=a')).statusCode, 400)
+  })
+})
+
+describe('exportação em CSV', () => {
+  it('exporta o caixa do mês em formato do Excel brasileiro', async () => {
+    await chamar('POST', '/api/caixa/lancamentos', {
+      tipo: 'entrada', descricao: '=HYPERLINK("x")', valor: 1234.5, data: emDias(0),
+    })
+    const resposta = await chamar('GET', `/api/exportar/caixa.csv?mes=${emDias(0).slice(0, 7)}`)
+    assert.equal(resposta.statusCode, 200)
+    assert.match(String(resposta.headers['content-type']), /text\/csv/)
+    assert.match(String(resposta.headers['content-disposition']), /attachment; filename="caixa-/)
+    const texto = resposta.body
+    assert.ok(texto.startsWith('﻿Data;Tipo;Origem'), 'BOM e separador ponto e vírgula')
+    assert.ok(texto.includes(`"'=HYPERLINK(""x"")"`), 'fórmula vira texto')
+    assert.ok(texto.includes(';1234,50;'), 'vírgula decimal')
+  })
+
+  it('exige o mês e exporta histórico e repasses', async () => {
+    assert.equal((await chamar('GET', '/api/exportar/caixa.csv')).statusCode, 400)
+    const historico = await chamar('GET', `/api/exportar/historico.csv?mes=${emDias(0).slice(0, 7)}`)
+    assert.equal(historico.body.trim().split('\r\n').length, 13, 'cabeçalho + 12 meses')
+    const repasses = await chamar('GET', '/api/exportar/repasses.csv?status=pago')
+    assert.equal(repasses.statusCode, 200)
+    assert.ok(repasses.body.startsWith('﻿Advogado;'))
+  })
+})
+
+describe('repasses por advogado', () => {
+  let outro = ''
+  let ids: string[] = []
+
+  before(async () => {
+    const advogados = (await chamar('GET', '/api/advogados?limite=100')).json().dados
+    outro = advogados.find((a: { principal: boolean }) => !a.principal).id
+    for (const valor of [100, 300]) {
+      await chamar('POST', '/api/caixa/lancamentos', {
+        tipo: 'entrada', descricao: `Lote ${valor}`, valor, data: emDias(0),
+        repasses: [{ advogado_id: outro, percentual: 50 }],
+      })
+    }
+    const pendentes = (
+      await chamar('GET', `/api/caixa/lancamentos?origem=repasse&status=pendente&advogado_id=${outro}&limite=100`)
+    ).json().dados as { id: string; advogado_id: string; pai_descricao: string }[]
+    assert.ok(pendentes.every((r) => r.advogado_id === outro), 'filtra pelo advogado')
+    ids = pendentes.filter((r) => r.pai_descricao.startsWith('Lote ')).map((r) => r.id)
+    assert.equal(ids.length, 2)
+  })
+
+  it('resume o que cada advogado tem a receber', async () => {
+    const { advogados } = (await chamar('GET', '/api/repasses/resumo')).json()
+    const dele = advogados.find((a: { id: string }) => a.id === outro)
+    assert.ok(Number(dele.a_pagar) >= 200)
+    assert.ok(Number(dele.qtd_a_pagar) >= 2)
+  })
+
+  it('paga vários de uma vez e não paga nada se algum já estiver pago', async () => {
+    const pago = await chamar('POST', '/api/repasses/pagamento-lote', { ids, data_pagamento: emDias(0), forma_pagamento: 'pix' })
+    assert.equal(pago.statusCode, 200)
+    assert.deepEqual(pago.json(), { pagos: 2, total: 200 })
+
+    const extra = (await chamar('POST', '/api/caixa/lancamentos', {
+      tipo: 'entrada', descricao: 'Lote extra', valor: 80, data: emDias(0), repasses: [{ advogado_id: outro, percentual: 50 }],
+    })).json()
+    const novo = (await chamar('GET', '/api/caixa/lancamentos?origem=repasse&status=pendente&limite=100')).json().dados
+      .find((r: { pai_id: string }) => r.pai_id === extra.id).id
+    const repetido = await chamar('POST', '/api/repasses/pagamento-lote', { ids: [novo, ids[0]], data_pagamento: emDias(0) })
+    assert.equal(repetido.statusCode, 409)
+    const aindaPendente = (await chamar('GET', '/api/caixa/lancamentos?origem=repasse&status=pendente&limite=100')).json().dados
+    assert.ok(aindaPendente.some((r: { id: string }) => r.id === novo), 'a transação desfez o pagamento do novo')
+
+    const futuro = await chamar('POST', '/api/repasses/pagamento-lote', { ids: [novo], data_pagamento: emDias(3) })
+    assert.equal(futuro.statusCode, 400)
+  })
+})
+
+describe('alertas e previsão no dashboard', () => {
+  it('avisa de parcela atrasada há mais de 30 dias e de repasse parado', async () => {
+    const antes = (await chamar('GET', '/api/dashboard')).json().alertas
+    const cliente = (await chamar('POST', '/api/clientes', { nome: 'Cliente Atrasado' })).json().id
+    await chamar('POST', '/api/contas', {
+      cliente_id: cliente, descricao: 'Muito atrasada', valor_total: 700, primeiro_vencimento: emDias(-45),
+    })
+    const depois = (await chamar('GET', '/api/dashboard')).json().alertas
+    assert.equal(Number(depois.parcelas_atrasadas), Number(antes.parcelas_atrasadas) + 1)
+    assert.equal(Number(depois.parcelas_atrasadas_valor) - Number(antes.parcelas_atrasadas_valor), 700)
+    assert.equal(depois.dias_atraso, 30)
+    assert.ok(Array.isArray(depois.contas_negativas))
+  })
+
+  it('projeta 30, 60 e 90 dias somando o que entra e tirando o que sai', async () => {
+    const { previsao, caixa } = (await chamar('GET', '/api/dashboard')).json()
+    assert.deepEqual(previsao.map((p: { dias: number }) => p.dias), [30, 60, 90])
+    for (const p of previsao) {
+      const c = (v: string | number) => Math.round(Number(v) * 100)
+      assert.equal(c(p.saldo_previsto), c(caixa.saldo) + c(p.a_receber) - c(p.a_pagar) - c(p.repasses))
+    }
+    assert.ok(Number(previsao[2].a_receber) >= Number(previsao[0].a_receber), 'o horizonte maior inclui o menor')
+  })
+
+  it('conta programada ainda não gerada entra na previsão', async () => {
+    const antes = (await chamar('GET', '/api/dashboard')).json().previsao[2]
+    const dia = Number(emDias(40).slice(8, 10))
+    await chamar('POST', '/api/despesas', {
+      descricao: 'Software mensal', valor: 99.9, dia_vencimento: Math.min(dia, 28), inicio: emDias(35),
+    })
+    const depois = (await chamar('GET', '/api/dashboard')).json().previsao[2]
+    const diferenca = Math.round((Number(depois.a_pagar) - Number(antes.a_pagar)) * 100) / 100
+    assert.ok(diferenca >= 99.9 && diferenca <= 99.9 * 2, `entra 1 ou 2 meses, entrou ${diferenca}`)
+  })
+})
+
+describe('editar nota', () => {
+  it('edita o texto, marca como editada e recusa texto vazio', async () => {
+    const cliente = (await chamar('POST', '/api/clientes', { nome: 'Cliente da Nota Editada' })).json().id
+    const nota = (await chamar('POST', '/api/notas', { cliente_id: cliente, texto: 'Primeira versão' })).json()
+    assert.equal(nota.editado_em, null)
+
+    const editada = await chamar('PUT', `/api/notas/${nota.id}`, { texto: '  Versão corrigida ' })
+    assert.equal(editada.statusCode, 200)
+    assert.equal(editada.json().texto, 'Versão corrigida')
+    assert.ok(editada.json().editado_em)
+
+    assert.equal((await chamar('PUT', `/api/notas/${nota.id}`, { texto: '   ' })).statusCode, 400)
+    assert.equal((await chamar('PUT', '/api/notas/00000000-0000-0000-0000-000000000000', { texto: 'x' })).statusCode, 404)
+  })
+})

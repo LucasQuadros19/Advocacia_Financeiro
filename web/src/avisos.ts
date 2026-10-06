@@ -1,14 +1,15 @@
 import { ref } from 'vue'
 
-export type Aviso = { id: number; texto: string; tom: 'sucesso' | 'erro' }
+export type LinkAviso = { texto: string; href: string }
+export type Aviso = { id: number; texto: string; tom: 'sucesso' | 'erro'; link?: LinkAviso }
 
 export const avisos = ref<Aviso[]>([])
 let sequencia = 0
 
-export function avisar(texto: string, tom: Aviso['tom'] = 'sucesso') {
+export function avisar(texto: string, tom: Aviso['tom'] = 'sucesso', link?: Aviso['link']) {
   const id = (sequencia += 1)
-  avisos.value = [...avisos.value, { id, texto, tom }]
-  setTimeout(() => descartar(id), 4500)
+  avisos.value = [...avisos.value, { id, texto, tom, link }]
+  setTimeout(() => descartar(id), link ? 10000 : 4500)
 }
 
 export const descartar = (id: number) => {

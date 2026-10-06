@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useRoute } from 'vue-router'
 import Avisos from './components/Avisos.vue'
+import BuscaGeral from './components/BuscaGeral.vue'
 import Icone from './components/Icone.vue'
 import { api } from './api.ts'
 import { iniciais } from './format.ts'
@@ -17,6 +18,7 @@ const grupos = [
       { para: '/caixa', rotulo: 'Caixa', icone: 'caixa' },
       { para: '/historico', rotulo: 'Histórico mensal', icone: 'historico' },
       { para: '/contas-programadas', rotulo: 'Contas programadas', icone: 'relogio' },
+      { para: '/repasses', rotulo: 'Repasses', icone: 'repasses' },
     ],
   },
   {
@@ -35,6 +37,10 @@ const grupos = [
   },
 ]
 
+const hojeExtenso = new Date().toLocaleDateString('pt-BR', {
+  weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+})
+
 const ativo = (para: string) => (para === '/' ? rota.path === '/' : rota.path.startsWith(para))
 
 async function sair() {
@@ -45,7 +51,7 @@ async function sair() {
 </script>
 
 <template>
-  <RouterView v-if="rota.meta.publica" />
+  <RouterView v-if="rota.meta.publica || rota.meta.impressao" />
   <div v-else class="app">
     <aside class="lateral">
       <div class="marca">
@@ -67,18 +73,22 @@ async function sair() {
           </RouterLink>
         </template>
       </nav>
-      <div class="rodape">
-        <div v-if="usuario" class="quem">
-          <span class="inicial">{{ iniciais(usuario.nome) }}</span>
-          <div>
-            <strong>{{ usuario.nome }}</strong>
-            <span>@{{ usuario.login }}</span>
-          </div>
-          <button class="botao icone" aria-label="Sair" title="Sair" @click="sair"><Icone nome="sair" /></button>
-        </div>
-      </div>
     </aside>
     <main class="conteudo">
+      <header class="barra-topo">
+        <BuscaGeral />
+        <div class="barra-topo-direita">
+          <span class="data-hoje">{{ hojeExtenso }}</span>
+          <div v-if="usuario" class="quem">
+            <span class="inicial">{{ iniciais(usuario.nome) }}</span>
+            <div>
+              <strong>{{ usuario.nome }}</strong>
+              <span>@{{ usuario.login }}</span>
+            </div>
+          </div>
+          <button class="botao pequeno" @click="sair"><Icone nome="sair" /> Sair</button>
+        </div>
+      </header>
       <RouterView />
     </main>
   </div>

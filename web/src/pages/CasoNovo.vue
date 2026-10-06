@@ -91,7 +91,7 @@ async function salvar() {
   salvando.value = true
   erroFormulario.value = ''
   try {
-    const criado = await api.post<{ id: string }>('/casos', {
+    const criado = await api.post<{ id: string; conta_id: string | null }>('/casos', {
       cliente_id: clienteId.value,
       titulo: caso.titulo,
       valor: paraNumero(caso.valor),
@@ -111,7 +111,13 @@ async function salvar() {
           }
         : undefined,
     })
-    avisar('Caso criado.')
+    avisar(
+      'Caso criado.',
+      'sucesso',
+      criado.conta_id && resumo.value.pagamentos > 1
+        ? { texto: 'Termo de parcelamento', href: `/imprimir/parcelamento/${criado.conta_id}` }
+        : undefined,
+    )
     router.push(`/casos/${criado.id}`)
   } catch (e) {
     erroFormulario.value = (e as Error).message

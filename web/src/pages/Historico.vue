@@ -121,6 +121,14 @@ const grafico = computed(() =>
       <button class="botao icone" :disabled="indice <= 0" aria-label="Próximo mês" @click="ir(1)">
         <Icone nome="proximo" />
       </button>
+      <a
+        class="botao"
+        :href="`/api/exportar/historico.csv?mes=${mes}`"
+        download
+        title="Baixar os 12 meses até o mês escolhido"
+      >
+        <Icone nome="baixar" /> Exportar 12 meses
+      </a>
     </div>
   </div>
 

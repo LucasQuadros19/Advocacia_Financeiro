@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises'
 import { expect, test, type Page } from '@playwright/test'
 
 const hoje = new Date().toLocaleDateString('en-CA')
@@ -510,7 +511,7 @@ test('usuários, baixa e adiamento, auditoria e histórico', async ({ page }) =>
   await page.getByRole('button', { name: 'Entrar', exact: true }).click()
   await expect(page.getByText('Usuário ou senha inválidos')).toBeVisible()
   await entrar(page, 'guilherme', 'senha-guilherme-1')
-  await expect(page.locator('.lateral .quem')).toContainText('Guilherme Souza')
+  await expect(page.locator('.barra-topo .quem')).toContainText('Guilherme Souza')
 
   await page.getByRole('navigation').getByRole('link', { name: 'Contas programadas' }).click()
   const aluguel = page.getByRole('row', { name: /Aluguel da sala/ })
@@ -578,4 +579,121 @@ test('parcelas no caso, conta criada na hora, observação e auditoria legível'
   await expect(detalhe.getByRole('rowheader', { name: '1º vencimento' })).toBeVisible()
   await expect(detalhe.getByRole('rowheader', { name: 'Divisão do caso' })).toBeVisible()
   await expect(detalhe).not.toContainText('{"')
+})
+
+test('dados do escritório, recibo e termo de parcelamento para imprimir', async ({ page }) => {
+  await entrar(page)
+  await page.getByRole('link', { name: 'Configurações' }).click()
+  await page.getByRole('tab', { name: 'Escritório' }).click()
+  await page.getByLabel('Nome do escritório *').fill('Quadros Advocacia')
+  await page.getByLabel('CNPJ ou CPF').fill('12.345.678/0001-90')
+  await page.getByLabel('Cidade / UF').fill('Florianópolis/SC')
+  await page.getByRole('button', { name: 'Salvar' }).click()
+  await expect(page.getByText('Dados do escritório salvos.')).toBeVisible()
+
+  await page.getByRole('link', { name: 'Clientes' }).click()
+  await page.getByText('João da Silva').first().click()
+  await page.getByText('Honorários — Ação Trabalhista').click()
+
+  const [recibo] = await Promise.all([
+    page.waitForEvent('popup'),
+    page.getByRole('link', { name: /^Recibo de R\$ 320,00/ }).click(),
+  ])
+  await expect(recibo.getByRole('heading', { name: 'Recibo' })).toHaveCount(2)
+  const via = recibo.locator('.recibo').first()
+  await expect(via).toContainText('Via do cliente')
+  await expect(via).toContainText('João da Silva')
+  await expect(via).toContainText('trezentos e vinte reais')
+  await expect(via).toContainText('Honorários — Ação Trabalhista — parcela 1/3')
+  await expect(via).toContainText('Florianópolis/SC,')
+  await expect(recibo.locator('.cabecalho-documento')).toContainText('Quadros Advocacia')
+  await expect(recibo.locator('.cabecalho-documento')).toContainText('CNPJ/CPF 12.345.678/0001-90')
+  await recibo.emulateMedia({ media: 'print' })
+  await expect(recibo.locator('.barra-impressao')).toBeHidden()
+  await recibo.close()
+
+  const [termo] = await Promise.all([
+    page.waitForEvent('popup'),
+    page.getByRole('link', { name: 'Termo de parcelamento para assinar' }).first().click(),
+  ])
+  await expect(termo.getByRole('heading', { name: 'Termo de acordo de parcelamento' })).toBeVisible()
+  await expect(termo.locator('.partes')).toContainText('123.456.789-00')
+  await expect(termo.locator('.tabela-documento tbody tr')).toHaveCount(3)
+  await expect(termo.getByText('Testemunha 1 — nome e CPF')).toBeVisible()
+  await expect(termo.getByText('escreva as cláusulas padrão')).toBeVisible()
+  await termo.close()
+})
+
+test('lançamento manual gera recibo e o caixa exporta para o Excel', async ({ page }) => {
+  await entrar(page)
+  await page.getByRole('link', { name: 'Caixa', exact: true }).click()
+  await page.getByRole('button', { name: 'Novo lançamento' }).first().click()
+  await page.getByLabel('Descrição *').fill('Consulta para recibo')
+  await page.getByLabel('Valor *').fill('600,00')
+  await page.getByLabel('Dividir com outro advogado').selectOption({ label: 'Ana Martins' })
+  await page.getByRole('button', { name: '50%', exact: true }).click()
+  await page.getByRole('button', { name: 'Lançar no caixa' }).click()
+
+  const aviso = page.locator('.toast').filter({ hasText: 'Lançamento registrado.' })
+  const [recibo] = await Promise.all([page.waitForEvent('popup'), aviso.getByRole('link', { name: 'Recibo' }).click()])
+  await expect(recibo.locator('.recibo').first()).toContainText('seiscentos reais')
+  await expect(recibo.locator('.recibo').first()).toContainText('Consulta para recibo')
+  await expect(recibo.locator('.lacuna').first()).toBeVisible()
+  await recibo.close()
+
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: 'Exportar' }).click()])
+  expect(download.suggestedFilename()).toMatch(/^caixa-\d{4}-\d{2}\.csv$/)
+  const csv = await readFile((await download.path())!, 'utf8')
+  expect(csv).toContain('Data;Tipo;Origem;Descrição')
+  expect(csv).toContain('Consulta para recibo')
+  expect(csv).toContain('600,00')
+})
+
+test('repasses do advogado pagos de uma vez', async ({ page }) => {
+  await entrar(page)
+  await page.getByRole('navigation').getByRole('link', { name: 'Repasses' }).click()
+  await expect(page.getByRole('heading', { name: 'Repasses', exact: true })).toBeVisible()
+  await expect(page.locator('.cartao').filter({ hasText: 'Ana Martins' })).toBeVisible()
+
+  await page.getByLabel('Advogado').selectOption({ label: 'Ana Martins' })
+  await expect(page.getByRole('row', { name: /Consulta para recibo/ })).toContainText('R$ 300,00')
+  await page.getByLabel('Selecionar todos os repasses a pagar desta página').check()
+  await expect(page.locator('.barra-selecao')).toContainText('selecionado(s)')
+  await page.getByRole('button', { name: 'Pagar selecionados' }).click()
+
+  const modal = page.getByRole('dialog', { name: 'Pagar repasses' })
+  await expect(modal).toContainText('Ana Martins')
+  await modal.getByRole('button', { name: /^Pagar R\$/ }).click()
+  await expect(page.getByText(/repasse\(s\) pago\(s\), somando/)).toBeVisible()
+  await expect(page.getByText('Nenhum repasse a pagar. Tudo em dia.')).toBeVisible()
+
+  await page.getByLabel('Situação').selectOption({ label: 'Pagos' })
+  await expect(page.getByRole('row', { name: /Consulta para recibo/ })).toContainText('Pago em')
+})
+
+test('busca geral, barra do topo, edição de nota e painel de alertas', async ({ page }) => {
+  await entrar(page)
+  await expect(page.locator('.barra-topo .quem')).toContainText('Lucas Quadros')
+  await expect(page.getByRole('heading', { name: 'Atenção' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Previsão de caixa' })).toBeVisible()
+  await expect(page.getByRole('columnheader', { name: 'Em 90 dias' })).toBeVisible()
+
+  await page.keyboard.press('Control+k')
+  const busca = page.getByRole('combobox', { name: 'Buscar' })
+  await expect(busca).toBeFocused()
+  await busca.fill('320,00')
+  await expect(page.locator('.paleta-grupo').filter({ hasText: 'Valores' })).toBeVisible()
+  await busca.fill('Ação Trab')
+  await expect(page.getByRole('option', { name: /Ação Trabalhista/ }).first()).toBeVisible()
+  await busca.press('Enter')
+  await expect(page.getByRole('heading', { name: 'Ação Trabalhista' })).toBeVisible()
+
+  const nota = page.locator('.item-nota').filter({ hasText: 'Contrato enviado por e-mail.' })
+  await nota.getByRole('button', { name: 'Editar nota' }).click()
+  const edicao = page.locator('.edicao-nota')
+  await expect(edicao.getByLabel('Texto da nota')).toHaveValue('Contrato enviado por e-mail.')
+  await edicao.getByLabel('Texto da nota').fill('Contrato enviado e assinado.')
+  await edicao.getByRole('button', { name: 'Salvar' }).click()
+  await expect(page.getByText('Nota atualizada.')).toBeVisible()
+  await expect(page.locator('.item-nota').filter({ hasText: 'Contrato enviado e assinado.' })).toContainText('editada')
 })

@@ -28,6 +28,9 @@ onUnmounted(() => document.removeEventListener('keydown', aoTeclar))
       <div v-for="aviso in avisos" :key="aviso.id" class="toast" :class="aviso.tom">
         <Icone :nome="aviso.tom === 'erro' ? 'alerta' : 'confirmar'" />
         <span>{{ aviso.texto }}</span>
+        <a v-if="aviso.link" class="botao pequeno" :href="aviso.link.href" target="_blank" rel="noopener">
+          <Icone nome="imprimir" /> {{ aviso.link.texto }}
+        </a>
         <button class="botao icone" aria-label="Fechar aviso" @click="descartar(aviso.id)"><Icone nome="fechar" /></button>
       </div>
     </div>

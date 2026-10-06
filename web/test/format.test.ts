@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { dataHora, paraNumero, resumoCobranca } from '../src/format.ts'
+import { dataHora, paraNumero, porExtenso, resumoCobranca } from '../src/format.ts'
 
 describe('paraNumero', () => {
   it('aceita os formatos que o usuário digita', () => {
@@ -63,5 +63,35 @@ describe('resumoCobranca', () => {
   it('nunca parcela em menos de uma vez', () => {
     assert.equal(resumoCobranca('900', '', 0).quantidade, 1)
     assert.equal(resumoCobranca('900', '', -5).quantidade, 1)
+  })
+})
+
+describe('porExtenso', () => {
+  const casos: [number, string][] = [
+    [0, 'zero reais'],
+    [1, 'um real'],
+    [0.01, 'um centavo'],
+    [0.5, 'cinquenta centavos'],
+    [100, 'cem reais'],
+    [101, 'cento e um reais'],
+    [21.21, 'vinte e um reais e vinte e um centavos'],
+    [1500.5, 'mil e quinhentos reais e cinquenta centavos'],
+    [1100, 'mil e cem reais'],
+    [1234.56, 'mil duzentos e trinta e quatro reais e cinquenta e seis centavos'],
+    [2050, 'dois mil e cinquenta reais'],
+    [2_000_000, 'dois milhões de reais'],
+    [1_200_000, 'um milhão e duzentos mil reais'],
+    [1_000_001, 'um milhão e um reais'],
+    [
+      99_999_999.99,
+      'noventa e nove milhões novecentos e noventa e nove mil novecentos e noventa e nove reais e noventa e nove centavos',
+    ],
+  ]
+  for (const [valor, esperado] of casos) {
+    it(`${valor} → ${esperado}`, () => assert.equal(porExtenso(valor), esperado))
+  }
+
+  it('aceita o texto numérico que vem da API', () => {
+    assert.equal(porExtenso('300.00'), 'trezentos reais')
   })
 })

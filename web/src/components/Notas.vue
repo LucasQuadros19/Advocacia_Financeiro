@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import Aviso from './Aviso.vue'
 import Estado from './Estado.vue'
 import Icone from './Icone.vue'
@@ -10,7 +10,10 @@ import { dataHora, iniciais } from '../format.ts'
 import { useRecurso } from '../recurso.ts'
 import { usuario } from '../sessao.ts'
 
-type Nota = { id: string; autor: string; texto: string; criado_em: string; cliente_id: string | null; caso_id: string | null }
+type Nota = {
+  id: string; autor: string; texto: string; criado_em: string; editado_em: string | null
+  cliente_id: string | null; caso_id: string | null
+}
 type Escopo = 'todas' | 'caso' | 'cliente'
 
 const props = defineProps<{ clienteId?: string; casoId?: string; clienteNome?: string; descricao?: string }>()
@@ -65,6 +68,34 @@ async function adicionar() {
     erroEnvio.value = (e as Error).message
   } finally {
     enviando.value = false
+  }
+}
+
+const editando = ref<string>()
+const textoEdicao = ref('')
+const salvandoEdicao = ref(false)
+
+async function editar(nota: Nota) {
+  editando.value = nota.id
+  textoEdicao.value = nota.texto
+  await nextTick()
+  document.getElementById(`editar-nota-${nota.id}`)?.focus()
+}
+
+async function salvarEdicao(nota: Nota) {
+  const conteudo = textoEdicao.value.trim()
+  if (!conteudo) return
+  if (conteudo === nota.texto) return (editando.value = undefined)
+  salvandoEdicao.value = true
+  try {
+    await api.put(`/notas/${nota.id}`, { texto: conteudo })
+    editando.value = undefined
+    avisar('Nota atualizada.')
+    await notas.recarregar()
+  } catch (e) {
+    avisar((e as Error).message, 'erro')
+  } finally {
+    salvandoEdicao.value = false
   }
 }
 
@@ -189,11 +220,41 @@ const mensagemVazia = computed(() =>
                 {{ nota.cliente_id ? 'Do cliente' : 'Do caso' }}
               </span>
               <time :datetime="nota.criado_em">{{ dataHora(nota.criado_em) }}</time>
-              <button type="button" class="botao icone" aria-label="Excluir nota" title="Excluir nota" @click="excluir(nota)">
-                <Icone nome="excluir" />
-              </button>
+              <span v-if="nota.editado_em" class="editada" :title="`Editada ${dataHora(nota.editado_em)}`">· editada</span>
+              <span class="acoes-nota">
+                <button
+                  v-if="editando !== nota.id"
+                  type="button"
+                  class="botao icone"
+                  aria-label="Editar nota"
+                  title="Editar nota"
+                  @click="editar(nota)"
+                >
+                  <Icone nome="editar" />
+                </button>
+                <button type="button" class="botao icone" aria-label="Excluir nota" title="Excluir nota" @click="excluir(nota)">
+                  <Icone nome="excluir" />
+                </button>
+              </span>
             </div>
-            <p>{{ nota.texto }}</p>
+            <form v-if="editando === nota.id" class="edicao-nota" @submit.prevent="salvarEdicao(nota)">
+              <label class="sr" :for="`editar-nota-${nota.id}`">Texto da nota</label>
+              <textarea
+                :id="`editar-nota-${nota.id}`"
+                v-model="textoEdicao"
+                maxlength="4000"
+                @keydown.ctrl.enter="salvarEdicao(nota)"
+                @keydown.meta.enter="salvarEdicao(nota)"
+                @keydown.esc="editando = undefined"
+              />
+              <div class="acoes">
+                <button type="button" class="botao pequeno" @click="editando = undefined">Cancelar</button>
+                <button type="submit" class="botao pequeno primario" :disabled="salvandoEdicao || !textoEdicao.trim()">
+                  {{ salvandoEdicao ? 'Salvando…' : 'Salvar' }}
+                </button>
+              </div>
+            </form>
+            <p v-else>{{ nota.texto }}</p>
           </div>
         </li>
       </ol>

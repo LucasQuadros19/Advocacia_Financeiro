@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRoute } from 'vue-router'
 import Aviso from '../components/Aviso.vue'
 import CampoCarteira from '../components/CampoCarteira.vue'
 import CampoMoeda from '../components/CampoMoeda.vue'
@@ -15,7 +15,7 @@ import ModalTransferencia from '../components/ModalTransferencia.vue'
 import Paginacao from '../components/Paginacao.vue'
 import Selo from '../components/Selo.vue'
 import { api, type Pagina } from '../api.ts'
-import { avisar, confirmar } from '../avisos.ts'
+import { avisar, confirmar, type LinkAviso } from '../avisos.ts'
 import { data, hoje, moeda, paraNumero, percentual, prazo, rotuloForma } from '../format.ts'
 import { useOrdenacao } from '../ordenacao.ts'
 import { useRecurso } from '../recurso.ts'
@@ -44,8 +44,9 @@ type Carteira = {
 }
 type PaginaCaixa = Pagina<Lancamento> & { totais: Totais }
 
+const rota = useRoute()
 const mesAtual = hoje().slice(0, 7)
-const aba = ref<'movimento' | 'aberto' | 'casos'>('movimento')
+const aba = ref<'movimento' | 'aberto' | 'casos'>(rota.query.aba === 'aberto' ? 'aberto' : 'movimento')
 const mes = ref(mesAtual)
 const tipo = ref('')
 const conta = ref('')
@@ -176,13 +177,18 @@ const porDia = computed(() => {
 const salvando = ref(false)
 const erroFormulario = ref('')
 
-async function executar(acao: () => Promise<unknown>, sucesso: string, fechar?: () => void) {
+async function executar<T>(
+  acao: () => Promise<T>,
+  sucesso: string,
+  fechar?: () => void,
+  link?: (resultado: T) => LinkAviso | undefined,
+) {
   salvando.value = true
   erroFormulario.value = ''
   try {
-    await acao()
+    const resultado = await acao()
     fechar?.()
-    avisar(sucesso)
+    avisar(sucesso, 'sucesso', link?.(resultado))
     await atualizar()
   } catch (e) {
     const mensagem = (e as Error).message
@@ -202,11 +208,12 @@ const salvarLancamento = (corpo: Record<string, unknown>) => {
   const divisao = (corpo.repasses as { percentual: number }[] | undefined) ?? []
   const repassado = divisao.reduce((s, r) => s + (Number(corpo.valor) * r.percentual) / 100, 0)
   return executar(
-    () => api.post('/caixa/lancamentos', corpo),
+    () => api.post<{ id: string; tipo: string }>('/caixa/lancamentos', corpo),
     divisao.length
       ? `Lançamento registrado. ${moeda(repassado)} entrou como saída a pagar para o advogado.`
       : 'Lançamento registrado.',
     () => (modalLancamento.value = false),
+    (l) => (l.tipo === 'entrada' ? { texto: 'Recibo', href: `/imprimir/recibo/manual/${l.id}` } : undefined),
   )
 }
 
@@ -252,7 +259,7 @@ const salvarPagamento = (repasses: Repasse[]) => {
   const parcela = atual.value!.origem === 'parcela'
   return executar(
     () =>
-      api.post(rotaPagamento(atual.value!), {
+      api.post<{ recebimento_id?: string }>(rotaPagamento(atual.value!), {
         data_pagamento: formPagamento.data_pagamento,
         forma_pagamento: formPagamento.forma_pagamento || undefined,
         carteira_id: formPagamento.carteira_id || undefined,
@@ -262,6 +269,7 @@ const salvarPagamento = (repasses: Repasse[]) => {
       }),
     repasses.length ? 'Pagamento registrado e repasse lançado.' : 'Pagamento registrado.',
     () => (modalPagamento.value = false),
+    (r) => (r.recebimento_id ? { texto: 'Recibo', href: `/imprimir/recibo/recebimento/${r.recebimento_id}` } : undefined),
   )
 }
 
@@ -346,6 +354,7 @@ const diaLongo = (iso: string) =>
   new Date(`${iso}T00:00:00Z`).toLocaleDateString('pt-BR', {
     day: '2-digit', month: 'long', weekday: 'short', timeZone: 'UTC',
   })
+const temRecibo = (l: Lancamento) => l.tipo === 'entrada' && (l.origem === 'recebimento' || l.origem === 'manual')
 const parcial = (l: Lancamento) => l.valor_parcela !== null && Number(l.valor) < Number(l.valor_parcela)
 </script>
 
@@ -446,6 +455,14 @@ const parcial = (l: Lancamento) => l.valor_parcela !== null && Number(l.valor) <
                 <option v-for="c in contas" :key="c.id" :value="c.id">{{ c.nome }}</option>
               </select>
             </div>
+            <a
+              class="botao"
+              :href="`/api/exportar/caixa.csv?mes=${mes}`"
+              download
+              title="Baixar o movimento do mês para abrir no Excel"
+            >
+              <Icone nome="baixar" /> Exportar
+            </a>
           </div>
         </header>
 
@@ -502,6 +519,17 @@ const parcial = (l: Lancamento) => l.valor_parcela !== null && Number(l.valor) <
                   <td class="dinheiro entrada">{{ sinal(l) > 0 ? moeda(l.valor) : '' }}</td>
                   <td class="dinheiro saida">{{ sinal(l) < 0 ? moeda(l.valor) : '' }}</td>
                   <td class="num nowrap">
+                    <a
+                      v-if="temRecibo(l)"
+                      class="botao icone"
+                      :href="`/imprimir/recibo/${l.origem}/${l.id}`"
+                      target="_blank"
+                      rel="noopener"
+                      aria-label="Imprimir recibo"
+                      title="Imprimir recibo para o cliente"
+                    >
+                      <Icone nome="imprimir" />
+                    </a>
                     <button
                       v-if="l.tipo !== 'transferencia'"
                       class="botao icone"
