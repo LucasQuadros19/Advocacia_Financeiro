@@ -1,0 +1,23 @@
+{
+  "name": "financeiro",
+  "private": true,
+  "workspaces": [
+    "api",
+    "web"
+  ],
+  "scripts": {
+    "db:up": "docker compose up -d db",
+    "db:down": "docker compose down",
+    "migrate": "npm run migrate -w api",
+    "seed": "npm run seed -w api",
+    "dev": "npm run db:up && (npm run dev -w api & npm run dev -w web & wait)",
+    "build": "npm run build -w web",
+    "check": "npm run check -w api && npm run check -w web",
+    "test": "npm run test -w api && npm run test -w web",
+    "test:e2e": "playwright test",
+    "e2e:servidor": "npm run build && rm -rf api/public && cp -r web/dist api/public && node --disable-warning=ExperimentalWarning --env-file=.env.test api/src/index.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.50.0"
+  }
+}

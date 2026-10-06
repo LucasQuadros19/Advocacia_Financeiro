@@ -1,0 +1,24 @@
+{
+  "name": "api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --disable-warning=ExperimentalWarning --env-file-if-exists=../.env --watch src/index.ts",
+    "start": "node --disable-warning=ExperimentalWarning src/index.ts",
+    "migrate": "node --disable-warning=ExperimentalWarning --env-file-if-exists=../.env src/migrate.ts",
+    "seed": "node --disable-warning=ExperimentalWarning --env-file-if-exists=../.env src/seed.ts",
+    "check": "tsc --noEmit",
+    "test": "node --disable-warning=ExperimentalWarning --env-file-if-exists=../.env.test --test test/*.test.ts",
+    "usuario": "node --disable-warning=ExperimentalWarning --env-file-if-exists=../.env src/usuario.ts"
+  },
+  "dependencies": {
+    "@fastify/static": "^8.0.0",
+    "fastify": "^5.2.0",
+    "pg": "^8.13.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/pg": "^8.11.0",
+    "typescript": "^5.7.0"
+  }
+}
