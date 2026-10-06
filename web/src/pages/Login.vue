@@ -52,30 +52,9 @@ async function entrar() {
 
 <template>
   <div class="tela-login">
-    <aside class="vitrine">
-      <div class="marca">
-        <span class="simbolo"><Icone nome="advogados" :tamanho="19" /></span>
-        <div>
-          <strong>Financeiro</strong>
-          <span>Escritório de advocacia</span>
-        </div>
-      </div>
-
-      <div class="chamada">
-        <h2>O dinheiro do escritório, em ordem.</h2>
-        <ul>
-          <li><span><Icone nome="banco" /></span>Saldo de cada banco e do dinheiro em espécie</li>
-          <li><span><Icone nome="casos" /></span>Cobranças, recebimentos parciais e repasses</li>
-          <li><span><Icone nome="escudo" /></span>Auditoria de tudo o que é feito, por quem e quando</li>
-        </ul>
-      </div>
-
-      <p class="rodape-vitrine">Acesso restrito à equipe do escritório.</p>
-    </aside>
-
-    <main class="lado-formulario">
+    <main>
       <form class="formulario-login" @submit.prevent="entrar">
-        <div class="marca compacta">
+        <div class="marca">
           <span class="simbolo"><Icone nome="advogados" :tamanho="19" /></span>
           <strong>Financeiro</strong>
         </div>
