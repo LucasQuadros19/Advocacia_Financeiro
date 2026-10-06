@@ -13,7 +13,7 @@ import PainelContas from '../components/PainelContas.vue'
 import { api, type Pagina } from '../api.ts'
 import { avisar, confirmar } from '../avisos.ts'
 import { data, moeda, paraNumero, percentual, rotuloSituacao } from '../format.ts'
-import { garantirAutomatico, redistribuir, totalDistribuido, type Participante } from '../distribuicao.ts'
+import { restante, type Repasse } from '../distribuicao.ts'
 import { useRecurso } from '../recurso.ts'
 
 type Caso = {
@@ -31,48 +31,31 @@ const id = String(rota.params.id)
 const caso = useRecurso(() => api.get<Caso>(`/casos/${id}`))
 const advogados = useRecurso(() => api.get<Pagina<{ id: string; nome: string; principal: boolean }>>('/advogados?limite=100'))
 
-const distribuicao = ref<Participante[]>([])
+const distribuicao = ref<Repasse[]>([])
 const salvandoDistribuicao = ref(false)
 const erroDistribuicao = ref('')
 
-function montarDistribuicao(dados: Caso, lista: { id: string; nome: string; principal: boolean }[]): Participante[] {
-  if (dados.advogados.length) {
-    return redistribuir(
-      garantirAutomatico(
-        dados.advogados.map((a) => ({
-          advogado_id: a.advogado_id,
-          nome: a.nome,
-          percentual: Number(a.percentual),
-          ajustado: true,
-        })),
-      ),
-    )
-  }
-  const principal = lista.find((a) => a.principal)
-  return principal ? [{ advogado_id: principal.id, nome: principal.nome, percentual: 100, ajustado: false }] : []
-}
-
-watch([caso.dados, advogados.dados], ([dados, lista]) => {
-  if (dados) distribuicao.value = montarDistribuicao(dados, lista?.dados ?? [])
-})
+const salva = computed(() =>
+  (caso.dados.value?.advogados ?? [])
+    .filter((a) => !a.principal)
+    .map((a) => ({ advogado_id: a.advogado_id, percentual: Number(a.percentual) })),
+)
+watch(salva, (lista) => (distribuicao.value = lista.map((r) => ({ ...r }))))
+const alterada = computed(() => JSON.stringify(distribuicao.value) !== JSON.stringify(salva.value))
 
 onMounted(() => {
   caso.recarregar()
   advogados.recarregar()
 })
 
-const total = computed(() => totalDistribuido(distribuicao.value))
-
 async function salvarDistribuicao() {
   salvandoDistribuicao.value = true
   erroDistribuicao.value = ''
   try {
     await api.put(`/casos/${id}/advogados`, {
-      advogados: distribuicao.value
-        .filter((p) => Number(p.percentual) > 0)
-        .map((p) => ({ advogado_id: p.advogado_id, percentual: Number(p.percentual) })),
+      advogados: distribuicao.value.filter((p) => Number(p.percentual) > 0),
     })
-    avisar('Distribuição salva.')
+    avisar('Divisão salva.')
     await caso.recarregar()
   } catch (e) {
     erroDistribuicao.value = (e as Error).message
@@ -181,6 +164,44 @@ async function excluir() {
         />
       </section>
 
+      <section class="painel">
+        <header>
+          <div>
+            <h2>Divisão entre advogados</h2>
+            <p>
+              Já vem preenchida ao receber uma parcela deste caso.
+              <template v-if="Number(caso.dados.value.recebido) > 0">
+                Valores calculados sobre o recebido até agora ({{ moeda(caso.dados.value.recebido) }}).
+              </template>
+            </p>
+          </div>
+          <div class="acoes">
+            <span v-if="alterada" class="selo proxima">Alterações não salvas</span>
+            <button v-if="alterada" class="botao pequeno" @click="distribuicao = salva.map((r) => ({ ...r }))">Desfazer</button>
+            <button
+              class="botao primario pequeno"
+              :disabled="!alterada || salvandoDistribuicao || restante(distribuicao) < 0"
+              @click="salvarDistribuicao"
+            >
+              {{ salvandoDistribuicao ? 'Salvando…' : 'Salvar divisão' }}
+            </button>
+          </div>
+        </header>
+        <div class="corpo">
+          <p v-if="!advogados.dados.value?.dados.length" class="fraco" style="margin: 0">
+            Nenhum advogado cadastrado. <RouterLink to="/configuracoes">Cadastre os advogados</RouterLink> para dividir os valores.
+          </p>
+          <Distribuicao
+            v-else
+            id="divisao-caso"
+            v-model="distribuicao"
+            :advogados="advogados.dados.value?.dados ?? []"
+            :valor="Number(caso.dados.value.recebido)"
+          />
+          <Aviso v-if="erroDistribuicao" :texto="erroDistribuicao" style="margin: 12px 0 0" />
+        </div>
+      </section>
+
       <PainelContas
         :cliente-id="caso.dados.value.cliente_id"
         :caso-id="id"
@@ -195,32 +216,6 @@ async function excluir() {
         descricao="Andamento do caso: audiências, prazos e combinados."
       />
 
-      <section class="painel">
-        <header>
-          <div>
-            <h2>Distribuição entre advogados</h2>
-            <p>Vira a sugestão de repasse na hora de receber. O que não for dividido fica com o advogado principal.</p>
-          </div>
-          <button
-            class="botao primario pequeno"
-            :disabled="salvandoDistribuicao || total > 100"
-            @click="salvarDistribuicao"
-          >
-            {{ salvandoDistribuicao ? 'Salvando…' : 'Salvar distribuição' }}
-          </button>
-        </header>
-        <Distribuicao
-          v-model="distribuicao"
-          :advogados="advogados.dados.value?.dados ?? []"
-          :base="Number(caso.dados.value.recebido)"
-        />
-        <div v-if="erroDistribuicao || !advogados.dados.value?.dados.length" class="corpo" style="padding-top: 0">
-          <Aviso v-if="erroDistribuicao" :texto="erroDistribuicao" style="margin: 0" />
-          <p v-else class="fraco">
-            Nenhum advogado cadastrado. <RouterLink to="/configuracoes">Cadastre os advogados</RouterLink> para dividir os valores.
-          </p>
-        </div>
-      </section>
 
 
     </template>

@@ -37,7 +37,7 @@ const tentou = ref(false)
 
 const valor = computed(() => (props.parcial ? paraNumero(props.form.valor) : props.total))
 const falta = computed(() => Math.round((props.total - valor.value) * 100) / 100)
-const podeRepassar = computed(() => Boolean(!props.saida && props.advogados?.length))
+const podeRepassar = computed(() => Boolean(!props.saida && props.advogados?.some((a) => !a.principal)))
 const totalRepasse = computed(() => repasses.value.reduce((s, r) => s + (Number(r.percentual) || 0), 0))
 const erroValor = computed(() => {
   if (!props.parcial) return ''

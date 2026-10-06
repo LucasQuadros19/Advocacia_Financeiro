@@ -1,64 +1,36 @@
-import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { garantirAutomatico, redistribuir, totalDistribuido } from '../src/distribuicao.ts'
-import type { Participante } from '../src/tipos.ts'
+import assert from 'node:assert/strict'
+import { parteDe, restante, restanteEmDinheiro } from '../src/distribuicao.ts'
 
-const advogado = (nome: string, percentual: number, ajustado: boolean): Participante => ({
-  advogado_id: nome,
-  nome,
-  percentual,
-  ajustado,
-})
+const r = (percentual: number) => ({ advogado_id: String(percentual), percentual })
 
-const percentuais = (lista: Participante[]) => lista.map((p) => p.percentual)
-
-describe('redistribuir', () => {
-  it('advogado único fica com 100%', () => {
-    assert.deepEqual(percentuais(redistribuir([advogado('Lucas', 0, false)])), [100])
+describe('restante do principal', () => {
+  it('sem divisão fica com 100%', () => {
+    assert.equal(restante([]), 100)
   })
 
-  it('divide igualmente entre os automáticos', () => {
-    const lista = [advogado('Lucas', 0, false), advogado('Ana', 0, false)]
-    assert.deepEqual(percentuais(redistribuir(lista)), [50, 50])
+  it('é 100% menos os outros', () => {
+    assert.equal(restante([r(30), r(25.5)]), 44.5)
   })
 
-  it('o outro recebe o restante quando um é definido', () => {
-    const lista = [advogado('Lucas', 33, true), advogado('Ana', 0, false)]
-    assert.deepEqual(percentuais(redistribuir(lista)), [33, 67])
+  it('fica negativo quando passa de 100%', () => {
+    assert.equal(restante([r(80), r(40)]), -20)
   })
 
-  it('preserva os percentuais definidos manualmente', () => {
-    const lista = [advogado('Lucas', 60, true), advogado('Ana', 25, true), advogado('Bruno', 0, false)]
-    assert.deepEqual(percentuais(redistribuir(lista)), [60, 25, 15])
-  })
-
-  it('distribui centésimos sem perder soma', () => {
-    const lista = [advogado('A', 0, false), advogado('B', 0, false), advogado('C', 0, false)]
-    const resultado = redistribuir(lista)
-    assert.deepEqual(percentuais(resultado), [33.34, 33.33, 33.33])
-    assert.equal(totalDistribuido(resultado), 100)
-  })
-
-  it('zera o automático quando os definidos passam de 100%', () => {
-    const lista = [advogado('Lucas', 80, true), advogado('Ana', 40, true), advogado('Bruno', 0, false)]
-    assert.deepEqual(percentuais(redistribuir(lista)), [80, 40, 0])
-    assert.equal(totalDistribuido(redistribuir(lista)), 120)
-  })
-
-  it('não altera nada quando todos são manuais', () => {
-    const lista = [advogado('Lucas', 33, true), advogado('Ana', 20, true)]
-    assert.deepEqual(percentuais(redistribuir(lista)), [33, 20])
+  it('não perde centésimos com decimais', () => {
+    assert.equal(restante([r(33.33), r(33.33)]), 33.34)
   })
 })
 
-describe('garantirAutomatico', () => {
-  it('torna o último automático quando todos são manuais', () => {
-    const lista = garantirAutomatico([advogado('Lucas', 60, true), advogado('Ana', 40, true)])
-    assert.deepEqual(lista.map((p) => p.ajustado), [true, false])
+describe('partes em dinheiro', () => {
+  it('arredonda cada parte para centavos', () => {
+    assert.equal(parteDe(100, 33.33), 33.33)
+    assert.equal(parteDe(10, 33.335), 3.33)
   })
 
-  it('mantém a lista quando já existe um automático', () => {
-    const original = [advogado('Lucas', 60, true), advogado('Ana', 40, false)]
-    assert.equal(garantirAutomatico(original), original)
+  it('o principal fica com o que sobra, sem sumir centavo', () => {
+    const linhas = [r(33.33), r(33.33)]
+    const outros = linhas.reduce((s, l) => s + parteDe(1000.01, l.percentual), 0)
+    assert.equal(Math.round((outros + restanteEmDinheiro(1000.01, linhas)) * 100), 100001)
   })
 })

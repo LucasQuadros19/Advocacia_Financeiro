@@ -53,16 +53,37 @@ test('cliente novo abre o cadastro de caso com cobrança, divisão e caixa', asy
 
   const percentualDe = (nome: string) => page.getByLabel(`Percentual de ${nome}`)
 
-  await page.getByText('100% para Lucas Quadros').click()
-  await expect(percentualDe('Lucas Quadros')).toHaveValue('100')
-  await page.getByLabel('Adicionar advogado ao caso').selectOption({ label: 'Ana Martins' })
-  await expect(percentualDe('Lucas Quadros')).toHaveValue('50')
+  // a divisão já está à vista: o principal começa com tudo e não tem campo para digitar
+  const principal = page.locator('.linha-principal')
+  await expect(principal).toContainText('Lucas Quadros')
+  await expect(principal).toContainText('100%')
+  await expect(percentualDe('Lucas Quadros')).toHaveCount(0)
+  await page.getByLabel('Dividir com outro advogado').selectOption({ label: 'Ana Martins' })
+  await expect(percentualDe('Ana Martins')).toBeFocused()
+  await expect(principal).toContainText('50%')
   await percentualDe('Ana Martins').fill('40')
-  await expect(percentualDe('Lucas Quadros')).toHaveValue('60')
+  await expect(principal).toContainText('60%')
+  await expect(principal).toContainText('R$ 540,00')
 
   await page.getByRole('button', { name: 'Criar caso' }).click()
   await expect(page.getByRole('heading', { name: 'Ação Trabalhista' })).toBeVisible()
   await expect(page.getByText('60% do que falta, pela divisão')).toBeVisible()
+
+  // na ficha do caso a divisão só grava ao clicar em salvar, e avisa enquanto não grava
+  await expect(percentualDe('Ana Martins')).toHaveValue('40')
+  await expect(page.getByRole('button', { name: 'Salvar divisão' })).toBeDisabled()
+  await percentualDe('Ana Martins').fill('30')
+  await expect(page.getByText('Alterações não salvas')).toBeVisible()
+  await page.getByRole('button', { name: 'Desfazer' }).click()
+  await expect(percentualDe('Ana Martins')).toHaveValue('40')
+  await percentualDe('Ana Martins').fill('30')
+  await page.getByRole('button', { name: 'Salvar divisão' }).click()
+  await expect(page.getByText('Divisão salva.')).toBeVisible()
+  await expect(page.getByText('70% do que falta, pela divisão')).toBeVisible()
+  await percentualDe('Ana Martins').fill('40')
+  await page.getByRole('button', { name: 'Salvar divisão' }).click()
+  await expect(page.getByText('60% do que falta, pela divisão')).toBeVisible()
+  await expect(page.getByText('Alterações não salvas')).toHaveCount(0)
   await expect(page.getByRole('cell', { name: 'Honorários — Ação Trabalhista' })).toBeVisible()
 
   await page.getByRole('link', { name: 'João da Silva' }).first().click()
@@ -79,7 +100,8 @@ test('cliente novo abre o cadastro de caso com cobrança, divisão e caixa', asy
 
   await page.getByRole('button', { name: 'Registrar pagamento' }).first().click()
   await page.getByLabel('Forma de pagamento').selectOption('pix')
-  await expect(page.getByText('Fica com você: R$ 192,00')).toBeVisible()
+  await expect(page.getByText('Preenchido pela divisão do caso')).toBeVisible()
+  await expect(page.locator('.modal .linha-principal')).toContainText('R$ 192,00')
   await page.getByRole('button', { name: 'Confirmar recebimento' }).click()
   await expect(page.getByText('Pagamento registrado e repasse lançado.')).toBeVisible()
   await expect(page.getByRole('cell', { name: 'Pago', exact: true })).toBeVisible()
@@ -309,14 +331,11 @@ test('repasse a outro advogado entra cheio e cria a saída', async ({ page }) =>
   const linha = page.getByRole('row', { name: /Honorários — Caso dividido/ })
   await linha.getByRole('button', { name: 'Receber' }).click()
 
-  // a escolha do advogado fica recolhida até eu abrir
-  const repasse = page.getByText('Dividir com outro advogado')
-  await expect(repasse).toBeVisible()
-  await repasse.click()
-
-  await page.getByLabel('Adicionar advogado ao repasse').selectOption({ label: 'Ana Martins' })
+  // sem divisão no caso, tudo fica com o principal até eu escolher alguém
+  await expect(page.locator('.modal .linha-principal')).toContainText('Fica com tudo')
+  await page.getByLabel('Dividir com outro advogado').selectOption({ label: 'Ana Martins' })
   await page.getByRole('button', { name: '50%', exact: true }).click()
-  await expect(page.getByText('Fica com você: R$ 500,00')).toBeVisible()
+  await expect(page.locator('.modal .linha-principal')).toContainText('R$ 500,00')
 
   await page.getByRole('button', { name: 'Confirmar recebimento' }).click()
   await expect(page.getByText('Pagamento registrado e repasse lançado.')).toBeVisible()
@@ -352,10 +371,9 @@ test('lançamento manual entra no caixa e aceita repasse', async ({ page }) => {
   await page.getByLabel('Valor *').fill('1.000,00')
   await page.getByLabel('Categoria').fill('Consultoria')
 
-  await dividir.click()
-  await page.getByLabel('Adicionar advogado ao repasse').selectOption({ label: 'Ana Martins' })
+  await page.getByLabel('Dividir com outro advogado').selectOption({ label: 'Ana Martins' })
   await page.getByRole('button', { name: '40%', exact: true }).click()
-  await expect(page.getByText('Fica com você: R$ 600,00')).toBeVisible()
+  await expect(page.locator('.modal .linha-principal')).toContainText('R$ 600,00')
 
   await page.getByRole('button', { name: 'Lançar no caixa' }).click()
   await expect(page.getByText('Lançamento registrado.')).toBeVisible()

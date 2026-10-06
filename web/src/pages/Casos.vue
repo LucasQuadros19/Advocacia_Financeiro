@@ -94,7 +94,9 @@ onMounted(recarregar)
           <tr v-for="caso in dados.dados" :key="caso.id" class="clicavel" @click="router.push(`/casos/${caso.id}`)">
             <td>
               <RouterLink class="titulo-celula" :to="`/casos/${caso.id}`" @click.stop>{{ caso.titulo }}</RouterLink>
-              <div class="sub-celula">{{ caso.qtd_advogados }} advogado(s) na divisão</div>
+              <div class="sub-celula">
+                {{ Number(caso.qtd_advogados) ? `Dividido com ${caso.qtd_advogados} advogado(s)` : 'Só o advogado principal' }}
+              </div>
             </td>
             <td>
               <RouterLink :to="`/clientes/${caso.cliente_id}`" class="fraco" @click.stop>{{ caso.cliente_nome }}</RouterLink>

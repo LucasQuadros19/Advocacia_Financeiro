@@ -115,7 +115,8 @@ export function registrarCasos(app: FastifyInstance) {
                 coalesce(cx.total_recebido, 0) as recebido,
                 coalesce(cx.total_pendente, 0) as pendente,
                 coalesce(pa.percentual, 100) as percentual_principal,
-                (select count(*) from caso_advogados ca where ca.caso_id = cs.id) as qtd_advogados
+                (select count(*) from caso_advogados ca join advogados a on a.id = ca.advogado_id
+                 where ca.caso_id = cs.id and not a.principal) as qtd_advogados
          from casos cs
          join clientes cl on cl.id = cs.cliente_id
          left join vw_caixa cx on cx.caso_id = cs.id

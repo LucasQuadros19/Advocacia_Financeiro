@@ -12,7 +12,7 @@ import { api, type Pagina } from '../api.ts'
 import { avisar } from '../avisos.ts'
 import { FORMAS_PAGAMENTO, data as formatarData, hoje, moeda, paraNumero, resumoCobranca } from '../format.ts'
 import { useRecurso } from '../recurso.ts'
-import type { Participante } from '../distribuicao.ts'
+import { restante as sobraDaDivisao, type Repasse } from '../distribuicao.ts'
 
 type AdvogadoResumo = { id: string; nome: string; principal: boolean }
 
@@ -59,27 +59,7 @@ watch(
   },
 )
 
-const distribuicao = ref<Participante[]>([])
-const divisaoPersonalizada = ref(false)
-
-watch(advogados.dados, (pagina) => {
-  if (!pagina || divisaoPersonalizada.value) return
-  const principal = pagina.dados.find((a) => a.principal) ?? pagina.dados[0]
-  distribuicao.value = principal
-    ? [{ advogado_id: principal.id, nome: principal.nome, percentual: 100, ajustado: false }]
-    : []
-})
-
-function alterarDivisao(lista: Participante[]) {
-  distribuicao.value = lista
-  divisaoPersonalizada.value = true
-}
-
-const resumoDivisao = computed(() => {
-  if (!distribuicao.value.length) return 'Nenhum advogado cadastrado ainda'
-  if (distribuicao.value.length === 1) return `100% para ${distribuicao.value[0]!.nome}`
-  return distribuicao.value.map((p) => `${p.nome}: ${p.percentual}%`).join(' · ')
-})
+const distribuicao = ref<Repasse[]>([])
 
 const resumo = computed(() =>
   resumoCobranca(cobranca.valor_total, cobranca.entrada, cobranca.quantidade_parcelas),
@@ -97,6 +77,9 @@ async function salvar() {
     buscaCliente.value?.focar()
     return
   }
+  if (sobraDaDivisao(distribuicao.value) < 0) {
+    return (erroFormulario.value = 'A divisão entre advogados passou de 100%.')
+  }
   if (cobranca.ativa) {
     if (total <= 0) return (erroFormulario.value = 'Informe o valor total a receber.')
     if (entrada >= total) return (erroFormulario.value = 'A entrada precisa ser menor que o valor total.')
@@ -113,11 +96,7 @@ async function salvar() {
       titulo: caso.titulo,
       valor: paraNumero(caso.valor),
       descricao: caso.descricao || undefined,
-      advogados: divisaoPersonalizada.value
-        ? distribuicao.value
-            .filter((p) => Number(p.percentual) > 0)
-            .map((p) => ({ advogado_id: p.advogado_id, percentual: Number(p.percentual) }))
-        : undefined,
+      advogados: distribuicao.value.filter((p) => Number(p.percentual) > 0),
       conta: cobranca.ativa
         ? {
             descricao: cobranca.descricao,
@@ -353,33 +332,25 @@ async function criarCliente() {
         <span class="passo-numero">4</span>
         <div>
           <h2>Quem recebe</h2>
-          <p>Por padrão vai tudo para o advogado principal.</p>
+          <p>O advogado principal fica com tudo, a não ser que você divida com outro advogado aqui.</p>
         </div>
       </header>
-      <details class="recolhivel">
-        <summary>
-          <div>
-            <strong>{{ resumoDivisao }}</strong>
-            <span class="dica">Clique para dividir entre mais advogados</span>
-          </div>
-          <Icone nome="abrir" class="girar" />
-        </summary>
-        <div class="corpo">
-          <p v-if="!advogados.dados.value?.dados.length" class="aviso alerta">
-            <Icone nome="alerta" />
-            <span>
-              Nenhum advogado cadastrado.
-              <RouterLink to="/configuracoes">Cadastre em Configurações</RouterLink> para dividir os valores.
-            </span>
-          </p>
-          <Distribuicao
-            v-else
-            :model-value="distribuicao"
-            :advogados="advogados.dados.value?.dados ?? []"
-            @update:model-value="alterarDivisao"
-          />
-        </div>
-      </details>
+      <div class="corpo">
+        <p v-if="!advogados.dados.value?.dados.length" class="aviso alerta" style="margin: 0">
+          <Icone nome="alerta" />
+          <span>
+            Nenhum advogado cadastrado.
+            <RouterLink to="/configuracoes">Cadastre em Configurações</RouterLink> para dividir os valores.
+          </span>
+        </p>
+        <Distribuicao
+          v-else
+          id="divisao-caso"
+          v-model="distribuicao"
+          :advogados="advogados.dados.value?.dados ?? []"
+          :valor="cobranca.ativa ? resumo.total : 0"
+        />
+      </div>
     </section>
 
     <Aviso :texto="erroFormulario" />

@@ -311,18 +311,13 @@ a.aviso:hover { text-decoration: none; filter: brightness(0.98); }
 
 /* ---------- distribuição ---------- */
 
-.distribuicao { width: 100%; }
-.distribuicao th { background: transparent; border-bottom: 1px solid var(--borda); }
-.distribuicao td { padding: 9px 18px; }
-.distribuicao input[type="number"] { height: 34px; max-width: 108px; margin-left: auto; text-align: right; font-variant-numeric: tabular-nums; }
+.divisao input[type="number"] { height: 34px; width: 96px; text-align: right; font-variant-numeric: tabular-nums; }
 .entrada-percentual { display: flex; align-items: center; gap: 7px; justify-content: flex-end; }
 .entrada-percentual span { color: var(--texto-3); font-weight: 600; }
-.linha-automatica input { background: var(--acao-tinta); border-color: #c8d2f8; color: var(--acao); font-weight: 620; }
-.rodape-distribuicao {
-  display: flex; align-items: center; justify-content: space-between; gap: 14px;
-  padding: 14px 18px; border-top: 1px solid var(--borda); background: var(--superficie-2);
-}
-.rodape-distribuicao .total { font-weight: 640; font-variant-numeric: tabular-nums; }
+.linha-repasse.linha-principal { border-top: 0; padding-top: 4px; }
+.percentual-principal { font-size: 16px; font-variant-numeric: tabular-nums; min-width: 96px; text-align: right; }
+.adicionar-divisao { margin: 0; padding-top: 12px; max-width: 340px; }
+.divisao .aviso { margin: 12px 0 0; }
 
 /* ---------- abas ---------- */
 
@@ -606,7 +601,9 @@ a.aviso:hover { text-decoration: none; filter: brightness(0.98); }
 
 /* ---------- repasse no pagamento ---------- */
 
-.recolhivel.repasse summary strong { display: flex; align-items: center; gap: 6px; }
+.bloco-repasse { border: 1px solid var(--borda); border-radius: var(--r1); padding: 12px 14px; margin-bottom: 16px; }
+.bloco-repasse > header { display: flex; flex-direction: column; gap: 2px; margin-bottom: 4px; }
+.bloco-repasse > header strong { display: flex; align-items: center; gap: 6px; }
 
 
 .linha-repasse {
