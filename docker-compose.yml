@@ -3,11 +3,11 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: financeiro
-      POSTGRES_PASSWORD: financeiro
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
       POSTGRES_DB: financeiro
       TZ: America/Sao_Paulo
     ports:
-      - "5434:5432"
+      - "127.0.0.1:5434:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -16,14 +16,43 @@ services:
       timeout: 3s
       retries: 10
 
+  # Dump a cada 6 horas em ./backups, guardando 30 dias. Sobe junto com o banco.
+  backup:
+    image: postgres:16-alpine
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGUSER: financeiro
+      PGPASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+      PGDATABASE: financeiro
+      BACKUP_DIR: /backups
+      RETENTION_DAYS: 30
+      INTERVAL_SECONDS: 21600
+      TZ: America/Sao_Paulo
+    volumes:
+      - ./backups:/backups
+      - ./scripts/backup.sh:/usr/local/bin/backup.sh:ro
+    entrypoint:
+      - sh
+      - -c
+      - |
+        echo "Backups a cada $${INTERVAL_SECONDS}s, guardando $${RETENTION_DAYS} dias."
+        while true; do
+          sh /usr/local/bin/backup.sh || echo "backup falhou, tentando de novo no próximo ciclo"
+          sleep "$${INTERVAL_SECONDS}"
+        done
+
   app:
     build: .
     profiles: ["prod"]
+    restart: unless-stopped
     environment:
-      DATABASE_URL: postgres://financeiro:financeiro@db:5432/financeiro
+      DATABASE_URL: postgres://financeiro:${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}@db:5432/financeiro
       NODE_ENV: production
       PORT: 3333
-      SESSION_SECRET: ${SESSION_SECRET}
+      SESSION_SECRET: ${SESSION_SECRET:?defina SESSION_SECRET no .env}
       TZ: America/Sao_Paulo
     ports:
       - "3333:3333"

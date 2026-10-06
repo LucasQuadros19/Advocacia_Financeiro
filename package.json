@@ -6,7 +6,7 @@
     "web"
   ],
   "scripts": {
-    "db:up": "docker compose up -d db",
+    "db:up": "docker compose up -d db backup",
     "db:down": "docker compose down",
     "migrate": "npm run migrate -w api",
     "seed": "npm run seed -w api",
@@ -15,7 +15,8 @@
     "check": "npm run check -w api && npm run check -w web",
     "test": "npm run test -w api && npm run test -w web",
     "test:e2e": "playwright test",
-    "e2e:servidor": "npm run build && rm -rf api/public && cp -r web/dist api/public && node --disable-warning=ExperimentalWarning --env-file=.env.test api/src/index.ts"
+    "e2e:servidor": "npm run build && rm -rf api/public && cp -r web/dist api/public && node --disable-warning=ExperimentalWarning --env-file=.env.test api/src/index.ts",
+    "backup": "docker compose exec -T backup sh /usr/local/bin/backup.sh"
   },
   "devDependencies": {
     "@playwright/test": "^1.50.0"
