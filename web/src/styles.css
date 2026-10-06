@@ -1,7 +1,7 @@
 :root {
   color-scheme: light;
 
-  --fundo: #f4f6fa;
+  --fundo: #eef2f8;
   --superficie: #ffffff;
   --superficie-2: #fafbfd;
   --borda: #e7eaf0;
@@ -20,7 +20,11 @@
   --erro-tinta: #fdecea;
   --alerta: #8a5a00;
   --alerta-tinta: #fdf3e0;
-  --neutro-tinta: #eef1f6;
+  --neutro-tinta: #e5eaf2;
+  --acao-borda: #c9d3f1;
+  --cabecalho: #f0f3fa;
+  --marinho: #172440;
+  --marinho-texto: #c3cce0;
 
   --r1: 9px;
   --r2: 13px;
@@ -38,7 +42,7 @@
 }
 
 * { box-sizing: border-box; }
-body { margin: 0; background: linear-gradient(180deg, #f7f9fc 0%, var(--fundo) 420px); min-height: 100vh; }
+body { margin: 0; background: var(--fundo); min-height: 100vh; }
 
 h1, h2, h3 { margin: 0; font-weight: 640; letter-spacing: -0.018em; }
 h1 { font-size: 22px; }
@@ -56,8 +60,8 @@ a:hover { text-decoration: underline; }
 /* ---------- lateral ---------- */
 
 .lateral {
-  background: var(--superficie);
-  border-right: 1px solid var(--borda);
+  background: var(--marinho);
+  color: var(--marinho-texto);
   padding: 18px 14px;
   display: flex;
   flex-direction: column;
@@ -77,22 +81,25 @@ a:hover { text-decoration: underline; }
 .marca strong { font-size: 15px; letter-spacing: -0.02em; display: block; }
 .marca span { display: block; font-size: 11.5px; color: var(--texto-3); }
 
+.lateral .marca strong { color: #fff; }
+.lateral .marca span { color: #8a97b4; }
 .lateral nav { display: flex; flex-direction: column; gap: 2px; }
 .lateral .grupo {
   font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.07em; font-weight: 700;
-  color: var(--texto-3); padding: 14px 10px 6px;
+  color: #7d8bab; padding: 14px 10px 6px;
 }
 .lateral nav a {
   display: flex; align-items: center; gap: 10px;
   height: 38px; padding: 0 10px; border-radius: 10px;
-  color: var(--texto-2); font-weight: 530; transition: background 120ms ease, color 120ms ease;
+  color: var(--marinho-texto); font-weight: 530; transition: background 120ms ease, color 120ms ease;
 }
-.lateral nav a svg { color: var(--texto-3); transition: color 120ms ease; }
-.lateral nav a:hover { background: var(--neutro-tinta); color: var(--texto); text-decoration: none; }
-.lateral nav a:hover svg { color: var(--texto-2); }
-.lateral nav a.ativo { background: var(--acao-tinta); color: var(--acao); font-weight: 600; }
-.lateral nav a.ativo svg { color: var(--acao); }
-.lateral .rodape { margin-top: auto; border-top: 1px solid var(--borda); padding-top: 12px; }
+.lateral nav a svg { color: #8a97b4; transition: color 120ms ease; }
+.lateral nav a:hover { background: rgba(255, 255, 255, 0.06); color: #fff; text-decoration: none; }
+.lateral nav a:hover svg { color: #fff; }
+.lateral nav a.ativo { background: rgba(120, 146, 245, 0.2); color: #fff; font-weight: 600; box-shadow: inset 3px 0 0 #7b93f5; }
+.lateral nav a.ativo svg { color: #a9baf9; }
+.lateral .rodape { margin-top: auto; border-top: 1px solid rgba(255, 255, 255, 0.1); padding-top: 12px; }
+.lateral :focus-visible { outline-color: #a9baf9; }
 
 /* ---------- conteúdo ---------- */
 
@@ -147,7 +154,7 @@ a:hover { text-decoration: underline; }
 }
 .painel > header {
   display: flex; align-items: center; justify-content: space-between; gap: 14px;
-  padding: 15px 18px; border-bottom: 1px solid var(--borda); background: var(--superficie-2);
+  padding: 15px 18px; border-bottom: 1px solid var(--borda); background: var(--cabecalho);
 }
 .painel > header p { color: var(--texto-3); font-size: 12.5px; margin-top: 2px; }
 .painel .corpo { padding: 18px; }
@@ -156,7 +163,7 @@ table { width: 100%; border-collapse: collapse; }
 th, td { padding: 13px 18px; text-align: left; vertical-align: middle; }
 thead th {
   font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
-  color: var(--texto-3); font-weight: 680; background: var(--superficie-2);
+  color: #5d6b88; font-weight: 680; background: var(--cabecalho);
   border-bottom: 1px solid var(--borda); white-space: nowrap;
 }
 tbody td { border-bottom: 1px solid var(--borda); }
@@ -188,13 +195,13 @@ a.titulo-celula:hover, tbody tr.clicavel:hover .titulo-celula { color: var(--aca
   display: inline-flex; align-items: center; justify-content: center; gap: 7px;
   height: 37px; padding: 0 14px;
   border: 1px solid var(--borda-2); border-radius: var(--r1);
-  background: var(--superficie); color: var(--texto);
+  background: var(--superficie); color: var(--acao-2); border-color: var(--acao-borda);
   font: inherit; font-size: 13.5px; font-weight: 560; cursor: pointer;
   box-shadow: var(--sombra-1);
   transition: background 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
   white-space: nowrap;
 }
-.botao:hover { background: var(--superficie-2); border-color: #c3cad6; }
+.botao:hover { background: var(--acao-tinta); border-color: #b3c1ee; }
 .botao:active { box-shadow: none; }
 .botao:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
 .botao.primario { background: var(--acao); border-color: var(--acao); color: #fff; }
@@ -204,9 +211,10 @@ a.titulo-celula:hover, tbody tr.clicavel:hover .titulo-celula { color: var(--aca
 .botao.pequeno { height: 32px; padding: 0 11px; font-size: 12.5px; border-radius: 8px; }
 .botao.texto { border-color: transparent; background: transparent; box-shadow: none; color: var(--acao); }
 .botao.texto:hover { background: var(--acao-tinta); border-color: transparent; }
-.botao.icone { width: 32px; height: 32px; padding: 0; color: var(--texto-3); }
-.botao.icone.perigo { width: 37px; height: 37px; color: var(--erro); }
-.botao.icone:hover { color: var(--texto); }
+.botao.icone { width: 32px; height: 32px; padding: 0; color: #5d6b88; }
+.botao.icone.perigo { width: 37px; height: 37px; color: var(--erro); border-color: #eccbc8; }
+.botao.icone.perigo:hover { color: var(--erro); background: var(--erro-tinta); }
+.botao.icone:hover { color: var(--acao); }
 
 /* ---------- formulários ---------- */
 
@@ -317,6 +325,7 @@ a.aviso:hover { text-decoration: none; filter: brightness(0.98); }
 .linha-repasse.linha-principal { border-top: 0; padding-top: 4px; }
 .percentual-principal { font-size: 16px; font-variant-numeric: tabular-nums; min-width: 96px; text-align: right; }
 .adicionar-divisao { margin: 0; padding-top: 12px; max-width: 340px; }
+.adicionar-divisao select { border-color: var(--acao-borda); color: var(--acao-2); font-weight: 560; background-color: var(--acao-tinta); }
 .divisao .aviso { margin: 12px 0 0; }
 
 /* ---------- abas ---------- */
@@ -324,11 +333,11 @@ a.aviso:hover { text-decoration: none; filter: brightness(0.98); }
 .abas { display: flex; gap: 4px; border-bottom: 1px solid var(--borda); margin-bottom: 20px; }
 .abas button {
   border: none; background: none; padding: 10px 14px 12px; font: inherit; font-size: 13.5px; font-weight: 560;
-  color: var(--texto-3); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  color: var(--texto-2); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; border-radius: 8px 8px 0 0;
   transition: color 120ms ease, border-color 120ms ease;
 }
-.abas button:hover { color: var(--texto); }
-.abas button.ativo { color: var(--acao); border-bottom-color: var(--acao); }
+.abas button:hover { color: var(--acao); background: rgba(43, 74, 203, 0.05); }
+.abas button.ativo { color: var(--acao); border-bottom-color: var(--acao); background: var(--acao-tinta); }
 
 /* ---------- detalhe de conta ---------- */
 
@@ -646,8 +655,11 @@ a.aviso:hover { text-decoration: none; filter: brightness(0.98); }
 .lateral .quem { display: flex; align-items: center; gap: 10px; padding: 4px 4px 4px 6px; }
 .lateral .quem > div { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .lateral .quem strong { font-size: 13px; font-weight: 620; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.lateral .quem span:not(.inicial) { font-size: 11.5px; color: var(--texto-3); }
-.lateral .quem .inicial { width: 32px; height: 32px; font-size: 12px; }
+.lateral .quem strong { color: #fff; }
+.lateral .quem span:not(.inicial) { font-size: 11.5px; color: #8a97b4; }
+.lateral .quem .inicial { width: 32px; height: 32px; font-size: 12px; background: rgba(255, 255, 255, 0.1); color: #fff; }
+.lateral .quem .botao.icone { background: transparent; border-color: rgba(255, 255, 255, 0.16); color: var(--marinho-texto); box-shadow: none; }
+.lateral .quem .botao.icone:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
 
 /* ---------- usuários ---------- */
 
@@ -742,7 +754,7 @@ tbody tr.clicavel:focus-visible { outline: 2px solid var(--acao); outline-offset
 
 .segmentado {
   display: inline-flex; padding: 3px; gap: 2px; border-radius: 10px;
-  background: var(--neutro-tinta); border: 1px solid var(--borda);
+  background: #e6ebf6; border: 1px solid #d8dfef;
 }
 .segmentado button {
   border: 0; background: none; font: inherit; font-size: 12.5px; font-weight: 580; color: var(--texto-2);
